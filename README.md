@@ -34,15 +34,15 @@ Implementation: prodshape change validate
 
 ### Options
 
-| Option | Meaning |
-| --- | --- |
-| `--spec <path>` | spec checkout holding `conformance/cases` (env: `PDAC_SPEC`) |
-| `--cases <dir>` | corpus directory, overriding `--spec` |
+| Option             | Meaning                                                                     |
+| ------------------ | --------------------------------------------------------------------------- |
+| `--spec <path>`    | spec checkout holding `conformance/cases` (env: `PDAC_SPEC`)                |
+| `--cases <dir>`    | corpus directory, overriding `--spec`                                       |
 | `--command <argv>` | implementation command, repeatable; `--format json` is appended when absent |
-| `--case <name>` | run only this case, repeatable |
-| `--format <fmt>` | report format: `text` (default) or `json` |
-| `--keep` | keep the fixture working copies for inspection |
-| `--timeout <ms>` | per-command timeout |
+| `--case <name>`    | run only this case, repeatable                                              |
+| `--format <fmt>`   | report format: `text` (default) or `json`                                   |
+| `--keep`           | keep the fixture working copies for inspection                              |
+| `--timeout <ms>`   | per-command timeout                                                         |
 
 Exit codes follow the spec's table: `0` every case passed, `1` a case failed or errored, `2` invalid invocation or no corpus to run, `3` unexpected internal failure.
 
