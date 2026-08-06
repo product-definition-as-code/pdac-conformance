@@ -14,7 +14,9 @@ Node 24 or later. The runner has no runtime dependencies.
 
 ## Usage
 
-Point it at a spec checkout and tell it how to invoke the implementation under test:
+Two commands: `run` measures an implementation against the corpus, and `digests` checks the corpus against itself.
+
+Point `run` at a spec checkout and tell it how to invoke the implementation under test:
 
 ```bash
 git clone --depth 1 https://github.com/product-definition-as-code/spec.git
@@ -52,6 +54,26 @@ That failure is real and is the point of the tool. The corpus requires a citatio
 Exit codes follow the spec's table: `0` every case passed, `1` a case failed or errored, `2` invalid invocation or no corpus to run, `3` unexpected internal failure.
 
 To pin a conformance claim to a spec version, clone the spec at that ref and point `--spec` at it. The report names the revision it read the corpus from, so a result is attributable to a spec state rather than to whatever happened to be on disk.
+
+### Verifying the digests the corpus pins
+
+The corpus pins content digests: a citation ledger or a Markdown marker block records the digest of the artifact it cites. Nothing else recomputes them, so editing a fixture artifact silently invalidates the citation a case describes while the case keeps asserting its expected diagnostics. `digests` recomputes every pin, under the normalization `spec/validation.md` mandates, and needs no implementation at all:
+
+```bash
+pdac-lint digests --spec ./spec
+```
+
+```text
+Corpus: /work/spec @ d18339e, main
+
+4 pinned digest(s) verified across 5 case(s)
+```
+
+A pin is expected to match the artifact it cites, except in a case that exists because it does not. A case expecting `PRODUCT061` or `PRODUCT062` for an artifact pins a digest that must differ from that artifact's current content, and this asserts the difference rather than excusing it, so an edit that accidentally makes a tampered fixture faithful is reported instead of quietly voiding the case. The same holds for `PRODUCT060` and `PRODUCT042`. The expectation is read per artifact, never per case: a stale citation against one requirement says nothing about a pin against another.
+
+Resolution is scoped to `docs/product/model`. A Product Change's `proposed/` tree carries artifacts with the same ids as the baseline, and a citation resolves against the accepted definition, so indexing both would let a proposal decide whether a baseline pin still holds.
+
+`--spec`, `--cases`, `--case` and `--format` apply as above. `--command`, `--keep` and `--timeout` do not: there is no implementation to run.
 
 ### More than one command
 

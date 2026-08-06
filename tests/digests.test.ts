@@ -103,7 +103,9 @@ describe('digest normalization', () => {
 
   it('digests bytes, not decoded text', () => {
     // A digest over a lossy decode would collapse these two.
-    expect(digestBytes(Buffer.from([0xc3, 0xa9]))).not.toBe(digestBytes(Buffer.from([0xef, 0xbf, 0xbd])));
+    expect(digestBytes(Buffer.from([0xc3, 0xa9]))).not.toBe(
+      digestBytes(Buffer.from([0xef, 0xbf, 0xbd])),
+    );
   });
 });
 
@@ -125,7 +127,9 @@ describe('ledger pins', () => {
   });
 
   it('reports a malformed pin', async () => {
-    const report = await verifyDigests({ cases: await corpusWith({ pinned: 'sha256:NOTADIGEST' }) });
+    const report = await verifyDigests({
+      cases: await corpusWith({ pinned: 'sha256:NOTADIGEST' }),
+    });
     expect(report.pins.map((p) => p.status)).toEqual(['malformed']);
   });
 

@@ -157,7 +157,9 @@ async function collectPins(repoDir: string): Promise<Pin[]> {
     }
     if (!path.endsWith('.md')) continue;
     const text = await readFile(path, 'utf8');
-    for (const [, block] of text.matchAll(markerPattern)) {
+    for (const match of text.matchAll(markerPattern)) {
+      const block = match[1];
+      if (block === undefined) continue;
       const attributes = new Map(
         [...block.matchAll(attributePattern)].map(([, key, value]) => [key, value]),
       );
