@@ -1,0 +1,5 @@
+{
+  "exit": 0,
+  "stdout": "0 error(s), 0 warning(s) across 4 artifact(s)\n",
+  "stderr": "this implementation ignored --format json\n"
+}

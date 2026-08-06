@@ -1,17 +1,98 @@
 # pdac-lint
 
-**Status: planned. Nothing here is usable yet.**
+Independent conformance runner for the [Product Definition as Code specification](https://github.com/product-definition-as-code/spec).
 
-This will be an independent conformance runner for the
-[Product Definition as Code specification](https://github.com/product-definition-as-code/spec):
-a CLI, a GitHub Action and a conformance badge, built against the spec's fixtures rather than
-against ProductShape's internals, so that conformance stops being self-referential.
+It runs the spec's versioned conformance corpus against any implementation CLI and compares the diagnostics that implementation emits against what the corpus says it must produce. The corpus is the authority; this runner only carries out its comparison rules. Nothing here reads an implementation's internals, so conformance stops being self-referential.
 
-It does not exist yet because the versioned conformance corpus it must run does not exist yet.
-Corpus first, runner second, badge last. Anything else would be a badge that certifies nothing.
+## Install
 
-When it ships, a badge will state exactly what was checked, spec version, conformance level and
-profile, never a bare "PDaC conformant".
+```bash
+npm install --global pdac-lint
+```
 
-If the organization profile or any page says this is usable today, that page is wrong and
-[we want to know](https://github.com/product-definition-as-code/spec/issues).
+Node 24 or later. The runner has no runtime dependencies.
+
+## Usage
+
+Point it at a spec checkout and tell it how to invoke the implementation under test:
+
+```bash
+git clone --depth 1 https://github.com/product-definition-as-code/spec.git
+pdac-lint run --spec ./spec --command "prodshape change validate"
+```
+
+```text
+Corpus: /work/spec @ f09f42a, main
+Implementation: prodshape change validate
+
+  pass  change-open-questions
+  pass  citation-current
+  pass  greenfield-first-increment
+
+3 case(s): 3 passed, 0 failed, 0 skipped, 0 errored
+```
+
+### Options
+
+| Option | Meaning |
+| --- | --- |
+| `--spec <path>` | spec checkout holding `conformance/cases` (env: `PDAC_SPEC`) |
+| `--cases <dir>` | corpus directory, overriding `--spec` |
+| `--command <argv>` | implementation command, repeatable; `--format json` is appended when absent |
+| `--case <name>` | run only this case, repeatable |
+| `--format <fmt>` | report format: `text` (default) or `json` |
+| `--keep` | keep the fixture working copies for inspection |
+| `--timeout <ms>` | per-command timeout |
+
+Exit codes follow the spec's table: `0` every case passed, `1` a case failed or errored, `2` invalid invocation or no corpus to run, `3` unexpected internal failure.
+
+To pin a conformance claim to a spec version, clone the spec at that ref and point `--spec` at it. The report names the revision it read the corpus from, so a result is attributable to a spec state rather than to whatever happened to be on disk.
+
+### More than one command
+
+A single implementation command rarely covers the whole spec. The reference implementation reports Product Change overlay diagnostics from `change validate` and baseline diagnostics from `validate`, so a run that means to check both passes both:
+
+```bash
+pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate"
+```
+
+Diagnostics from every command are unioned and deduplicated before the comparison. Each command is still required to emit its own diagnostics in the mandated order.
+
+## What a case must satisfy
+
+Each case is a directory under `conformance/cases/` holding a fixture repository (`repo/`), the diagnostics an implementation must produce (`expected.json`), and prose citing the clause under test (`case.md`).
+
+For every case the runner copies `repo/` to a scratch directory, runs each configured command there with `--format json`, and compares. The corpus is never written to: an implementation that refreshes generated outputs would otherwise change the fixture it was measured against.
+
+The comparison is the corpus's own, from `conformance/README.md`:
+
+- `severity`, `code`, `file`, `artifact`, `field` and `target` are compared;
+- `message` is implementation-defined and is never compared;
+- a field absent from an expected diagnostic is not asserted;
+- expected and emitted diagnostics are paired maximally, so an expectation naming only a code is satisfied by any emitted diagnostic carrying it, and each emitted diagnostic answers at most one expectation. Whatever is left unpaired is reported: expectations nothing satisfied are **missing**, emitted diagnostics nothing expected are **unexpected**;
+- diagnostics must be emitted in the order the spec mandates, by file then code then target, which is checked per command.
+
+An implementation exiting `1` is normal: it means the fixture legitimately contains errors. Exit `2` or `3`, output that is not JSON, or a command that hangs makes the case an **error** rather than a failure, because the run produced no verdict.
+
+A case this runner cannot execute is reported as **skipped**, with the reason, and never counted as evidence. That includes any `expected.json` reaching beyond `diagnostics`, which is how the corpus will express an apply invocation, an expected exit code and a working-tree outcome once that case format exists.
+
+## Scope
+
+This runner covers cases expressible as a fixture repository plus expected diagnostics. It does not yet cover the two apply cases (`apply-not-approved`, `apply-baseline-drift`), which need a case format the spec deferred until a runner existed. This is that runner, so that discussion is now unblocked.
+
+There is no GitHub Action and no badge yet. Corpus first, runner second, badge last. When a badge ships it will state exactly what was checked, spec version, conformance level and profile, never a bare "PDaC conformant".
+
+If the organization profile or any page says otherwise, that page is wrong and [we want to know](https://github.com/product-definition-as-code/spec/issues).
+
+## Development
+
+```bash
+pnpm install
+pnpm test
+```
+
+The tests run against a miniature corpus and a scripted stand-in implementation under `tests/fixtures/`, so they need neither a spec checkout nor any real implementation installed.
+
+## License
+
+Apache-2.0.

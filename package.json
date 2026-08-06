@@ -1,0 +1,56 @@
+{
+  "name": "pdac-lint",
+  "version": "0.1.0",
+  "description": "Conformance runner for the Product Definition as Code specification: run the versioned conformance corpus against any implementation CLI and compare the diagnostics it emits.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "bin": {
+    "pdac-lint": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "pdac",
+    "product-definition-as-code",
+    "conformance",
+    "conformance-testing",
+    "diagnostics",
+    "productshape",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/product-definition-as-code/pdac-lint.git"
+  },
+  "homepage": "https://github.com/product-definition-as-code/pdac-lint#readme",
+  "bugs": {
+    "url": "https://github.com/product-definition-as-code/pdac-lint/issues"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}

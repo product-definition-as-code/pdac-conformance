@@ -1,0 +1,13 @@
+{
+  "invocation": ["change", "apply", "chg-example"],
+  "exitCode": 1,
+  "workingTree": "unchanged",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "PRODUCT028",
+      "file": "docs/product/changes/active/chg-example/change.md",
+      "artifact": "CHG-EXAMPLE"
+    }
+  ]
+}

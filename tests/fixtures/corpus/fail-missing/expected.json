@@ -1,0 +1,10 @@
+{
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "PRODUCT006",
+      "file": "docs/product/model/use-cases/uc-example-001.md",
+      "target": "FR-ABSENT-001"
+    }
+  ]
+}

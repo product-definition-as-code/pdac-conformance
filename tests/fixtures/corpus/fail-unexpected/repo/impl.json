@@ -1,0 +1,4 @@
+{
+  "exit": 1,
+  "stdout": "{\"diagnostics\":[{\"severity\":\"error\",\"code\":\"PRODUCT005\",\"message\":\"duplicate id\",\"file\":\"docs/product/model/actors/act-example.md\",\"artifact\":\"ACT-EXAMPLE\"}]}"
+}

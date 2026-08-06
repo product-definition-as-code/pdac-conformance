@@ -1,0 +1,4 @@
+{
+  "exit": 0,
+  "stdout": "{\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"PRODUCT108\",\"message\":\"open questions remain\",\"file\":\"docs/product/changes/active/chg-example/change.md\",\"artifact\":\"CHG-EXAMPLE\"}]}"
+}

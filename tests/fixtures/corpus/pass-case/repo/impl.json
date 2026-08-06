@@ -1,0 +1,4 @@
+{
+  "exit": 0,
+  "stdout": "{\"schema\":\"product-definition-as-code/diagnostics/v1alpha1\",\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"PRODUCT108\",\"message\":\"an implementation-defined sentence the runner must ignore\",\"file\":\"docs/product/changes/active/chg-example/change.md\",\"artifact\":\"CHG-EXAMPLE\"}],\"summary\":{\"errors\":0,\"warnings\":1}}"
+}
