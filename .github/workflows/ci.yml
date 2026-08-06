@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      # The published artifact is a bundle, so a build that breaks is a release that breaks.
+      - run: pnpm build
+      - name: run the built binary
+        run: node dist/bin.js --help
+
+  quality:
+    name: lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+
+  corpus:
+    name: runner against the real corpus
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: check out the spec
+        uses: actions/checkout@v6
+        with:
+          repository: product-definition-as-code/spec
+          path: spec
+      # The implementation under test is installed, not vendored: this job measures a published
+      # CLI against a published corpus, which is the claim a badge would eventually carry.
+      - name: install the reference implementation
+        run: |
+          npm install --global @prodshape/cli
+          prodshape --version || true
+      # The runner's own reason to exist. Overlay diagnostics come from `change validate` and
+      # baseline diagnostics from `validate`, so both are configured and their findings unioned.
+      #
+      # Citation diagnostics (PRODUCT042, PRODUCT060-063) are not configured here because no
+      # command exposes them: `citations verify --format json` emits per-citation statuses and no
+      # diagnostics array (juangcarmona/productshape#67 and the envelope note on it). Adding the
+      # command would report an unreadable envelope, which says nothing this comment does not.
+      #
+      # This job gates the runner, not the implementation. A case the implementation fails is a
+      # true verdict about the implementation and must not turn this repository's build red, so
+      # only exit 2 and 3, the runner's own faults, fail the step. The report is published either
+      # way: a verdict nobody reads is a verdict nobody acts on.
+      - name: pdac-lint run
+        run: |
+          status=0
+          node dist/bin.js run --spec ./spec \
+            --command "prodshape validate" \
+            --command "prodshape change validate" > report.txt 2>&1 || status=$?
+          cat report.txt
+          {
+            echo '### pdac-lint against the spec corpus'
+            echo ''
+            echo '```text'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ge 2 ]; then
+            echo "::error::the runner failed to produce a verdict (exit $status)"
+            exit "$status"
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::the implementation under test did not pass every case (exit $status)"
+          fi

@@ -1,0 +1,15 @@
+{
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "PRODUCT108",
+      "file": "docs/product/changes/active/chg-example/change.md"
+    },
+    {
+      "severity": "warning",
+      "code": "PRODUCT061",
+      "file": "specs/feature.md",
+      "target": "FR-EXAMPLE-001"
+    }
+  ]
+}
