@@ -1,6 +1,9 @@
 /** The report schema this runner emits under `--format json`. */
 export const reportSchema = 'pdac-lint/conformance-report/v0';
 
+/** The report schema `pdac-lint digests` emits under `--format json`. */
+export const digestReportSchema = 'pdac-lint/digest-report/v0';
+
 /**
  * The fields a runner compares, from the corpus rules (`conformance/README.md`, "Comparing
  * diagnostics"). `message` is implementation-defined and is deliberately absent.
@@ -53,6 +56,12 @@ export interface CaseResult {
   workDir?: string;
 }
 
+/** A case the runner did not execute, and why. Reported, never dropped. */
+export interface SkippedCase {
+  name: string;
+  reason: string;
+}
+
 export interface SpecSource {
   /** Absolute path to the corpus directory the cases were read from. */
   cases: string;
@@ -78,4 +87,52 @@ export interface Report {
   commands: string[];
   cases: CaseResult[];
   summary: ReportSummary;
+}
+
+/** Where a fixture records a pinned digest: a citation ledger or a Markdown marker block. */
+export type PinKind = 'ledger' | 'marker';
+
+/**
+ * What was found about one pinned digest. The four sound statuses are `match`,
+ * `differs-as-expected` (the case expects stale or tampered), `unresolved-as-expected` and
+ * `malformed-as-expected`; the rest are corpus defects.
+ */
+export type PinStatus =
+  | 'match'
+  | 'differs-as-expected'
+  | 'unresolved-as-expected'
+  | 'malformed-as-expected'
+  | 'mismatch'
+  | 'unexpected-match'
+  | 'unresolved'
+  | 'malformed';
+
+export interface PinResult {
+  case: string;
+  /** The file recording the pin, relative to the case directory, with POSIX separators. */
+  source: string;
+  kind: PinKind;
+  /** The cited artifact id, absent when the record does not carry one. */
+  id?: string;
+  anchor?: string;
+  pinned: string;
+  /** The digest recomputed from the cited artifact, absent when it could not be recomputed. */
+  recomputed?: string;
+  status: PinStatus;
+}
+
+export interface DigestSummary {
+  total: number;
+  verified: number;
+  failed: number;
+  cases: number;
+}
+
+export interface DigestReport {
+  schema: typeof digestReportSchema;
+  spec: SpecSource;
+  /** One entry per pinned digest, in corpus order then path order. */
+  pins: PinResult[];
+  skipped: SkippedCase[];
+  summary: DigestSummary;
 }
