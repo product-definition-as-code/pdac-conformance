@@ -18,19 +18,24 @@ Point it at a spec checkout and tell it how to invoke the implementation under t
 
 ```bash
 git clone --depth 1 https://github.com/product-definition-as-code/spec.git
-pdac-lint run --spec ./spec --command "prodshape change validate"
+pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate"
 ```
 
 ```text
-Corpus: /work/spec @ f09f42a, main
+Corpus: /work/spec @ e75643e, main
+Implementation: prodshape validate
 Implementation: prodshape change validate
 
   pass  change-open-questions
   pass  citation-current
+  fail  citation-tampered-and-stale
+    missing:    error PRODUCT062 specs/feature-x.md [FR-VALIDATE-001]
   pass  greenfield-first-increment
 
-3 case(s): 3 passed, 0 failed, 0 skipped, 0 errored
+4 case(s): 3 passed, 1 failed, 0 skipped, 0 errored
 ```
+
+That failure is real and is the point of the tool. The corpus requires a citation whose embedded projection was hand-edited and whose target also moved to report `PRODUCT062` alone; the reference implementation reports it as `stale` instead, and no command it offers exposes citation diagnostics in the machine-readable envelope. A runner that hid either fact would be a badge that certifies nothing.
 
 ### Options
 
