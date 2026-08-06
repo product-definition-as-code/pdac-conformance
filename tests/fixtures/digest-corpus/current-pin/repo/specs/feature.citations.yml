@@ -1,0 +1,5 @@
+# Citation ledger for specs/feature.md
+citations:
+  - id: FR-FIXTURE-001
+    digest: sha256:0d362d5b3619373c31cceb82495252f7a19fc550728a620e6ea85585c4fbb463
+    anchor: S1
