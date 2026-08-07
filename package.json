@@ -1,6 +1,6 @@
 {
   "name": "pdac-lint",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Conformance runner for the Product Definition as Code specification: run the versioned conformance corpus against any implementation CLI and compare the diagnostics it emits.",
   "license": "Apache-2.0",
   "type": "module",

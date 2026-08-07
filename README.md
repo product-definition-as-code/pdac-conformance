@@ -73,6 +73,10 @@ A pin is expected to match the artifact it cites, except in a case that exists b
 
 Resolution is scoped to `docs/product/model`. A Product Change's `proposed/` tree carries artifacts with the same ids as the baseline, and a citation resolves against the accepted definition, so indexing both would let a proposal decide whether a baseline pin still holds.
 
+A pin carrying no id is never excused by an expectation, whatever that expectation names. A citation record with a digest and no target is unverifiable by construction, and reporting it as sound would be the check lying about its own coverage.
+
+Finding no pins at all exits `2`, not `0`. A gate that verified nothing must not read as a gate that passed, and exit `2` already means the command could not do its job.
+
 `--spec`, `--cases`, `--case` and `--format` apply as above. `--command`, `--keep` and `--timeout` do not: there is no implementation to run.
 
 ### More than one command

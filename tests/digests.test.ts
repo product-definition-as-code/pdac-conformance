@@ -208,6 +208,45 @@ describe('pins a case needs to differ', () => {
   });
 });
 
+describe('a pin carrying no id', () => {
+  /**
+   * `undefined === undefined` is true. A pin with no id must not be excused by an expectation
+   * that names no artifact and no target, or a citation nothing verified reads as verified.
+   */
+  it('is reported even when the case expects PRODUCT060 against nothing in particular', async () => {
+    const cases = await mkdtemp(join(tmpdir(), 'pdac-lint-digests-'));
+    const caseDir = join(cases, 'no-id-case');
+    const model = join(caseDir, 'repo', 'docs', 'product', 'model', 'requirements', 'functional');
+    const specs = join(caseDir, 'repo', 'specs');
+    await mkdir(model, { recursive: true });
+    await mkdir(specs, { recursive: true });
+    await writeFile(join(model, 'fr-example-001.md'), artifact);
+    await writeFile(
+      join(specs, 'feature.citations.yml'),
+      `citations:\n  - digest: ${currentDigest}\n`,
+    );
+    await writeFile(
+      join(caseDir, 'expected.json'),
+      `${JSON.stringify({ diagnostics: [{ code: 'PRODUCT060', file: 'specs/feature.md' }] }, null, 2)}\n`,
+    );
+    const report = await verifyDigests({ cases });
+    expect(report.pins.map((p) => p.status)).toEqual(['unresolved']);
+    expect(report.summary.failed).toBe(1);
+  });
+});
+
+describe('a corpus with nothing to verify', () => {
+  it('does not report success for having checked nothing', async () => {
+    const cases = await mkdtemp(join(tmpdir(), 'pdac-lint-digests-'));
+    const caseDir = join(cases, 'pinless-case');
+    await mkdir(join(caseDir, 'repo'), { recursive: true });
+    await writeFile(join(caseDir, 'expected.json'), '{ "diagnostics": [] }\n');
+    const report = await verifyDigests({ cases });
+    expect(report.pins).toEqual([]);
+    expect(report.summary.total).toBe(0);
+  });
+});
+
 describe('report shape', () => {
   it('carries the schema, the corpus source and a stable pin order', async () => {
     const report = await verifyDigests({ cases: await corpusWith({ pinned: currentDigest }) });

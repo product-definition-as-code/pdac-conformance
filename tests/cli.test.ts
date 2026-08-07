@@ -196,6 +196,16 @@ describe('pdac-lint digests', () => {
     expect(result.code).toBe(exitCodes.invalidInvocation);
     expect(result.err).toMatch(/no corpus given/);
   });
+
+  /**
+   * A gate that verified nothing must not read as a gate that passed. Exit 2 is already the code
+   * for "there was nothing to run", so finding no pins joins it rather than inventing a status.
+   */
+  it('refuses to report success when the corpus pins nothing', async () => {
+    const result = await invoke('digests', '--cases', corpusDir);
+    expect(result.code).toBe(exitCodes.invalidInvocation);
+    expect(result.err).toMatch(/no pinned digests/);
+  });
 });
 
 describe('pdac-lint invocation', () => {

@@ -47,7 +47,7 @@ Options:
 Exit codes:
   0  every case passed (skipped cases are reported, never counted as evidence)
   1  a case failed or errored
-  2  invalid invocation, or no corpus to run
+  2  invalid invocation, no corpus to run, or no pinned digests to verify
   3  unexpected internal failure
 
 Examples:
@@ -130,6 +130,13 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
       throw error;
     }
     io.out(format === 'json' ? renderDigestJson(digests) : renderDigestText(digests));
+    // A gate that verified nothing must not read as a gate that passed. Finding no pins is the
+    // same kind of outcome as finding no corpus: the command could not do its job, which is exit
+    // 2, not a clean bill of health.
+    if (digests.summary.total === 0) {
+      io.err(`error: no pinned digests found in ${digests.spec.cases}`);
+      return exitCodes.invalidInvocation;
+    }
     return digests.summary.failed > 0 ? exitCodes.conformanceFailures : exitCodes.success;
   }
 
