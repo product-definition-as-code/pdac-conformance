@@ -185,8 +185,13 @@ async function collectPins(repoDir: string): Promise<Pin[]> {
  * says nothing about a pin against another, and treating the expectation as case-wide would
  * excuse exactly the drift this check exists to find. Both `artifact` and `target` are consulted
  * because an unresolved citation names its target where a stale one names the artifact.
+ *
+ * A pin carrying no id is never excused. `undefined === undefined` is true, so without the guard
+ * an expectation naming no artifact and no target would match a pin naming nothing, and a citation
+ * this check never verified would be reported as sound.
  */
 function expects(expected: Diagnostic[], id: string | undefined, codes: string[]): boolean {
+  if (id === undefined) return false;
   return expected.some(
     (diagnostic) =>
       diagnostic.code !== undefined &&
