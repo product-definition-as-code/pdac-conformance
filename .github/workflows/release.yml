@@ -1,0 +1,143 @@
+name: Release
+
+# Publishing happens only here, never from a developer machine: package.json declares
+# publishConfig.provenance, and provenance needs the OIDC token that only CI has.
+#
+# Authentication prefers npm Trusted Publishing (OIDC) and falls back to the NPM_TOKEN secret.
+# The fallback exists because npm has no pending-publisher concept: a package must exist before a
+# trusted publisher can be configured for it, so the very first publish is necessarily token-authed.
+# See RELEASING.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build, test and pack, but publish nothing
+        type: boolean
+        default: false
+
+# One release at a time, and never cancel one that is in flight.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Least privilege by default; the job widens only what it needs.
+permissions: {}
+
+jobs:
+  release:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    # A protected environment with required reviewers, so reaching npm takes a human.
+    environment: npm-publish
+    permissions:
+      contents: write # push the version tag
+      id-token: write # OIDC trusted publishing, and provenance
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0 # tags, so the guard below can see them
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+          # Without this, setup-node writes no .npmrc and NODE_AUTH_TOKEN is silently ignored.
+          registry-url: https://registry.npmjs.org
+
+      - name: read the version to release
+        id: target
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "releasing pdac-lint@$version"
+
+      # npm versions are immutable, so a republish is not a fix and not an option. Fail here,
+      # before the build, rather than at the publish step with half the work done. Bump the version
+      # in a pull request and dispatch again; rollback is publish-forward.
+      - name: refuse a version that is already published
+        run: |
+          version='${{ steps.target.outputs.version }}'
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/pdac-lint/$version")
+          if [ "$code" = "200" ]; then
+            echo "::error::pdac-lint@$version is already on npm; bump the version and dispatch again"
+            exit 1
+          fi
+          if [ "$code" != "404" ]; then
+            echo "::error::cannot determine whether pdac-lint@$version exists (HTTP $code)"
+            exit 1
+          fi
+
+      - name: refuse a tag that already exists
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${{ steps.target.outputs.version }}" >/dev/null; then
+            echo "::error::tag v${{ steps.target.outputs.version }} already exists"
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      # A green build is a hard gate for any publish. These are the same checks CI runs; running
+      # them again here means the published artifact is the one that passed, not one that passed
+      # on some earlier commit.
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test
+      - run: pnpm build
+      - name: run the built binary
+        run: node dist/bin.js --help
+
+      # What would ship, listed, so a dry run is worth doing before the real one.
+      - name: pack
+        run: npm pack --dry-run
+
+      - name: publish
+        if: ${{ !inputs.dry_run }}
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # fallback; ignored once OIDC is configured
+          NPM_CONFIG_PROVENANCE: 'true'
+
+      # Verify rather than trust. The registry is the only authority on whether a publish landed,
+      # and it is eventually consistent, so give it a few seconds before believing a 404.
+      - name: verify the publish
+        if: ${{ !inputs.dry_run }}
+        run: |
+          version='${{ steps.target.outputs.version }}'
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/pdac-lint/$version")
+            if [ "$code" = "200" ]; then
+              echo "pdac-lint@$version is on the registry"
+              exit 0
+            fi
+            echo "attempt $attempt: HTTP $code, waiting"
+            sleep 5
+          done
+          echo "::error::pdac-lint@$version is not on the registry after a successful publish"
+          exit 1
+
+      # An annotated tag needs a committer identity, and a fresh checkout has none. Without this the
+      # tag is never created, `git push --tags` reports "Everything up-to-date", and the release
+      # looks clean while shipping no tag at all.
+      - name: tag the release
+        if: ${{ !inputs.dry_run }}
+        run: |
+          version='${{ steps.target.outputs.version }}'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$version" -m "v$version"
+          git push origin "v$version"
+          git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null
+
+      - name: summarize
+        run: |
+          {
+            if [ '${{ inputs.dry_run }}' = 'true' ]; then
+              echo '### Dry run: nothing was published'
+            else
+              echo '### Published pdac-lint@${{ steps.target.outputs.version }}'
+              echo ''
+              echo 'https://www.npmjs.com/package/pdac-lint/v/${{ steps.target.outputs.version }}'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
