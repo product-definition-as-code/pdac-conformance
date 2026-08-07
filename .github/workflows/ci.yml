@@ -91,13 +91,13 @@ jobs:
         run: |
           npm install --global @prodshape/cli
           prodshape --version || true
-      # The runner's own reason to exist. Overlay diagnostics come from `change validate` and
-      # baseline diagnostics from `validate`, so both are configured and their findings unioned.
+      # The runner's own reason to exist. No single command covers the corpus, so each is
+      # configured and their findings are unioned: baseline diagnostics come from `validate`,
+      # overlay diagnostics from `change validate`, and citation diagnostics (PRODUCT042,
+      # PRODUCT060-063) from `citations verify`.
       #
-      # Citation diagnostics (PRODUCT042, PRODUCT060-063) are not configured here because no
-      # command exposes them: `citations verify --format json` emits per-citation statuses and no
-      # diagnostics array (juangcarmona/productshape#67 and the envelope note on it). Adding the
-      # command would report an unreadable envelope, which says nothing this comment does not.
+      # `citations verify` takes `specs` because the command defaults its scan root to `openspec/`
+      # while the corpus fixtures put consumer documents in `specs/`.
       #
       # This job gates the runner, not the implementation. A case the implementation fails is a
       # true verdict about the implementation and must not turn this repository's build red, so
@@ -108,7 +108,8 @@ jobs:
           status=0
           node dist/bin.js run --spec ./spec \
             --command "prodshape validate" \
-            --command "prodshape change validate" > report.txt 2>&1 || status=$?
+            --command "prodshape change validate" \
+            --command "prodshape citations verify specs" > report.txt 2>&1 || status=$?
           cat report.txt
           {
             echo '### pdac-lint against the spec corpus'
