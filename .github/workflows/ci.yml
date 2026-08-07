@@ -55,10 +55,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # Pinned to the spec release this runner was verified against, not floating main: a corpus
+      # that moves under the job makes a red build ambiguous between "the runner regressed" and
+      # "the spec changed". Bump the ref deliberately when a new spec release is verified.
       - name: check out the spec
         uses: actions/checkout@v6
         with:
           repository: product-definition-as-code/spec
+          ref: v0.1.0
           path: spec
       # The corpus checking its own integrity, before any implementation is involved. A pin that no
       # longer matches the artifact it cites makes every citation case downstream of it meaningless,
@@ -89,7 +93,7 @@ jobs:
       # CLI against a published corpus, which is the claim a badge would eventually carry.
       - name: install the reference implementation
         run: |
-          npm install --global @prodshape/cli
+          npm install --global @prodshape/cli@0.8.0
           prodshape --version || true
       # The runner's own reason to exist. No single command covers the corpus, so each is
       # configured and their findings are unioned: baseline diagnostics come from `validate`,
