@@ -1,8 +1,9 @@
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 import { CorpusError } from './corpus.js';
+import { verifyDigests } from './digests.js';
 import { CommandError } from './execute.js';
-import { renderJson, renderText } from './report.js';
+import { renderDigestJson, renderDigestText, renderJson, renderText } from './report.js';
 import { defaultTimeoutMs, runCorpus } from './run.js';
 
 /** The spec's exit codes (spec/validation.md), applied to the runner itself. */
@@ -28,7 +29,8 @@ export function version(): string {
 export const usage = `pdac-lint - conformance runner for Product Definition as Code
 
 Usage:
-  pdac-lint run [options]
+  pdac-lint run [options]       run the corpus against an implementation
+  pdac-lint digests [options]   verify the digests the corpus pins, no implementation needed
 
 Options:
   --spec <path>       spec checkout holding conformance/cases (env: PDAC_SPEC)
@@ -48,8 +50,9 @@ Exit codes:
   2  invalid invocation, or no corpus to run
   3  unexpected internal failure
 
-Example:
-  pdac-lint run --spec ./spec --command "prodshape change validate"`;
+Examples:
+  pdac-lint run --spec ./spec --command "prodshape change validate"
+  pdac-lint digests --spec ./spec`;
 
 export async function runCli(argv: string[], io: Io): Promise<number> {
   let parsed;
@@ -91,7 +94,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
     io.err(usage);
     return exitCodes.invalidInvocation;
   }
-  if (command !== 'run' || rest.length > 0) {
+  if ((command !== 'run' && command !== 'digests') || rest.length > 0) {
     io.err(`error: unknown command '${[command, ...rest].join(' ')}'`);
     io.err(usage);
     return exitCodes.invalidInvocation;
@@ -101,6 +104,33 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
   if (format !== 'text' && format !== 'json') {
     io.err(`error: unknown format '${format}': expected text or json`);
     return exitCodes.invalidInvocation;
+  }
+
+  const spec = values.spec ?? io.env.PDAC_SPEC;
+  if (!spec && !values.cases) {
+    io.err(
+      'error: no corpus given: pass --spec <spec checkout>, --cases <directory>, or PDAC_SPEC',
+    );
+    io.err(usage);
+    return exitCodes.invalidInvocation;
+  }
+
+  // The digest check reads the fixtures and nothing else: it needs no implementation, and it must
+  // not depend on one, or the corpus would be checking its own integrity through the very thing
+  // it exists to judge.
+  if (command === 'digests') {
+    let digests;
+    try {
+      digests = await verifyDigests({ spec, cases: values.cases, only: values.case });
+    } catch (error) {
+      if (error instanceof CorpusError) {
+        io.err(`error: ${error.message}`);
+        return exitCodes.invalidInvocation;
+      }
+      throw error;
+    }
+    io.out(format === 'json' ? renderDigestJson(digests) : renderDigestText(digests));
+    return digests.summary.failed > 0 ? exitCodes.conformanceFailures : exitCodes.success;
   }
 
   const commands = values.command ?? [];
@@ -117,15 +147,6 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
       io.err(`error: --timeout expects a positive whole number of milliseconds`);
       return exitCodes.invalidInvocation;
     }
-  }
-
-  const spec = values.spec ?? io.env.PDAC_SPEC;
-  if (!spec && !values.cases) {
-    io.err(
-      'error: no corpus given: pass --spec <spec checkout>, --cases <directory>, or PDAC_SPEC',
-    );
-    io.err(usage);
-    return exitCodes.invalidInvocation;
   }
 
   let report;

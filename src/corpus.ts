@@ -3,7 +3,9 @@ import { readFile, stat } from 'node:fs/promises';
 import { readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { Diagnostic, SpecSource } from './types.js';
+import type { Diagnostic, SkippedCase, SpecSource } from './types.js';
+
+export type { SkippedCase } from './types.js';
 
 const run = promisify(execFile);
 
@@ -16,11 +18,6 @@ export interface CorpusCase {
   /** The fixture repository to run the implementation against. */
   repoDir: string;
   expected: Diagnostic[];
-}
-
-export interface SkippedCase {
-  name: string;
-  reason: string;
 }
 
 export interface Corpus {

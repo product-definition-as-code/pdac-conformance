@@ -60,6 +60,31 @@ jobs:
         with:
           repository: product-definition-as-code/spec
           path: spec
+      # The corpus checking its own integrity, before any implementation is involved. A pin that no
+      # longer matches the artifact it cites makes every citation case downstream of it meaningless,
+      # so it is worth knowing separately from any verdict about an implementation.
+      #
+      # Gated like the verdict below and for the same reason: a drifted pin is a fact about the spec
+      # repository, not about this runner, and must not turn this repository's build red.
+      - name: pinned digests
+        run: |
+          status=0
+          node dist/bin.js digests --spec ./spec > digests.txt 2>&1 || status=$?
+          cat digests.txt
+          {
+            echo '### pinned digests in the spec corpus'
+            echo ''
+            echo '```text'
+            cat digests.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ge 2 ]; then
+            echo "::error::pdac-lint digests could not run (exit $status)"
+            exit "$status"
+          fi
+          if [ "$status" -eq 1 ]; then
+            echo "::warning::the spec corpus pins a digest that no longer matches its artifact"
+          fi
       # The implementation under test is installed, not vendored: this job measures a published
       # CLI against a published corpus, which is the claim a badge would eventually carry.
       - name: install the reference implementation

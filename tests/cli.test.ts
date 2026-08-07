@@ -3,9 +3,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { exitCodes, runCli } from '../src/cli.js';
-import type { Report } from '../src/types.js';
+import type { DigestReport, Report } from '../src/types.js';
 
 const corpusDir = fileURLToPath(new URL('./fixtures/corpus', import.meta.url));
+const digestCorpusDir = fileURLToPath(new URL('./fixtures/digest-corpus', import.meta.url));
 const fakeImpl = fileURLToPath(new URL('./fixtures/impl/fake-impl.mjs', import.meta.url));
 
 /** The scripted implementation, quoted so a path with spaces survives the split. */
@@ -160,6 +161,40 @@ describe('pdac-lint run', () => {
     expect(result.out).toContain('Corpus:');
     expect(result.out).toContain('pass  pass-case');
     expect(result.out).toContain('1 case(s): 1 passed');
+  });
+});
+
+describe('pdac-lint digests', () => {
+  it('verifies a corpus whose pins still hold', async () => {
+    const result = await invoke('digests', '--cases', digestCorpusDir, '--case', 'current-pin');
+    expect(result.code).toBe(exitCodes.success);
+    expect(result.out).toMatch(/1 pinned digest\(s\) verified/);
+  });
+
+  it('fails a corpus whose pin no longer matches, naming both digests', async () => {
+    const result = await invoke('digests', '--cases', digestCorpusDir, '--case', 'stale-pin');
+    expect(result.code).toBe(exitCodes.conformanceFailures);
+    expect(result.out).toMatch(/mismatch/);
+    expect(result.out).toMatch(/recomputed/);
+  });
+
+  it('emits the digest report schema under --format json', async () => {
+    const result = await invoke('digests', '--cases', digestCorpusDir, '--format', 'json');
+    const json = JSON.parse(result.out) as DigestReport;
+    expect(json.schema).toBe('pdac-lint/digest-report/v0');
+    expect(json.summary).toMatchObject({ total: 2, verified: 1, failed: 1, cases: 2 });
+    expect(json.pins.map((pin) => pin.status)).toEqual(['match', 'mismatch']);
+  });
+
+  it('needs no implementation command', async () => {
+    const result = await invoke('digests', '--cases', digestCorpusDir, '--case', 'current-pin');
+    expect(result.err).not.toMatch(/no implementation to run/);
+  });
+
+  it('requires a corpus', async () => {
+    const result = await invoke('digests');
+    expect(result.code).toBe(exitCodes.invalidInvocation);
+    expect(result.err).toMatch(/no corpus given/);
   });
 });
 
