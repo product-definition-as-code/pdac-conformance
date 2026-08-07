@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,6 +29,55 @@ Because the thing matters.
 
 const currentDigest = digestText(artifact);
 const wrongDigest = `sha256:${'0'.repeat(64)}`;
+
+/**
+ * Cross-implementation known-answer vectors for the digest defined in
+ * [Validation](https://github.com/product-definition-as-code/spec/blob/main/spec/validation.md):
+ * SHA-256 over the UTF-8 bytes with CRLF and CR normalized to LF.
+ *
+ * ProductShape asserts these same numbers in `packages/core/src/digest.test.ts`. They exist
+ * because the two implementations silently disagreed on invalid UTF-8 (spec issue #32): that one
+ * decoded the file as UTF-8 before hashing, so an invalid sequence became U+FFFD and it hashed
+ * bytes the file did not contain. This implementation was the correct one and these vectors pin
+ * it. Any change here that is not mirrored there re-opens the divergence, so treat a failure as a
+ * specification question, not a number to update.
+ */
+const vectors = {
+  /** "a" + LF, reached from CRLF by normalization. */
+  aLf: 'sha256:87428fc522803d31065e7bce3cf03fe475096631e5e07bbd7a0fde60c4cf25c7',
+  /** The bytes 61 80 0A: "a", a lone continuation byte, LF. Not valid UTF-8. */
+  invalidUtf8: 'sha256:5182543278186d35b3b98e0db7b6f953d8ab827e006ef369dddcf80df106b463',
+  /** The bytes 61 EF BF BD 0A: what decoding 61 80 0A as UTF-8 and re-encoding produces. */
+  invalidUtf8Lossy: 'sha256:ac8d6e1e901dac0630c12b995618b09b5711fe14ca07c2cd6dc97e0bb4f92616',
+  /** The bytes C3 A9 0A: "é" + LF, valid multi-byte UTF-8. */
+  eAcute: 'sha256:edd3a863872a04239eb29ad4bc12fc892b3d4ae57cc7e786a3697816f8e141c2',
+} as const;
+
+describe('digest vectors shared with ProductShape', () => {
+  const invalid = Buffer.from([0x61, 0x80, 0x0a]);
+
+  it('normalizes CRLF and lone CR to LF', () => {
+    expect(digestBytes(Buffer.from([0x61, 0x0d, 0x0a]))).toBe(vectors.aLf);
+    expect(digestBytes(Buffer.from([0x61, 0x0d]))).toBe(vectors.aLf);
+    expect(digestText('a\r\n')).toBe(vectors.aLf);
+  });
+
+  it('hashes the bytes an invalid UTF-8 file actually contains', () => {
+    expect(digestBytes(invalid)).toBe(vectors.invalidUtf8);
+    expect(digestBytes(invalid)).not.toBe(vectors.invalidUtf8Lossy);
+  });
+
+  it('agrees with the text path for valid UTF-8', () => {
+    expect(digestText('é\n')).toBe(vectors.eAcute);
+    expect(digestBytes(Buffer.from('é\n', 'utf8'))).toBe(vectors.eAcute);
+  });
+
+  it('round-trips every byte value, so no input is silently altered', () => {
+    // 0x0d is excluded: it is line-ending input, and normalization is meant to change it.
+    const all = Buffer.from(Array.from({ length: 256 }, (_, i) => i).filter((b) => b !== 0x0d));
+    expect(digestBytes(all)).toBe(`sha256:${createHash('sha256').update(all).digest('hex')}`);
+  });
+});
 
 interface CaseOptions {
   pinned: string;
