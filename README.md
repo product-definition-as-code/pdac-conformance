@@ -120,6 +120,8 @@ pnpm test
 
 The tests run against a miniature corpus and a scripted stand-in implementation under `tests/fixtures/`, so they need neither a spec checkout nor any real implementation installed.
 
+Releases are published from CI only; see [RELEASING.md](RELEASING.md).
+
 ## License
 
 Apache-2.0.
