@@ -24,7 +24,7 @@ pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape 
 ```
 
 ```text
-Corpus: /work/spec @ e75643e, main
+Conformance: /work/spec @ e75643e, main
 Implementation: prodshape validate
 Implementation: prodshape change validate
 
@@ -64,7 +64,7 @@ pdac-lint digests --spec ./spec
 ```
 
 ```text
-Corpus: /work/spec @ d18339e, main
+Conformance: /work/spec @ d18339e, main
 
 4 pinned digest(s) verified across 5 case(s)
 ```

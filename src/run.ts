@@ -1,5 +1,5 @@
 import { compareDiagnostics, findOrderingViolation, toComparable } from './compare.js';
-import { discoverCorpus, type CorpusCase, type DiscoverOptions } from './corpus.js';
+import { discoverCases, type TestCase, type DiscoverOptions } from './cases.js';
 import { parseDiagnostics } from './envelope.js';
 import {
   runCommand,
@@ -44,101 +44,99 @@ function invocationFailure(run: CommandRun): string | undefined {
 }
 
 async function runCase(
-  corpusCase: CorpusCase,
+  testCase: TestCase,
   commands: string[][],
   options: RunOptions,
 ): Promise<CaseResult> {
   const result: CaseResult = {
-    name: corpusCase.name,
+    name: testCase.name,
     status: 'pass',
     missing: [],
     unexpected: [],
     runs: [],
   };
 
-  await withFixtureCopy(
-    corpusCase.repoDir,
-    corpusCase.name,
-    options.keep ?? false,
-    async (work) => {
-      if (options.keep) result.workDir = work;
+  await withFixtureCopy(testCase.repoDir, testCase.name, options.keep ?? false, async (work) => {
+    if (options.keep) result.workDir = work;
 
-      const seen = new Set<string>();
-      const union: Diagnostic[] = [];
+    const seen = new Set<string>();
+    const union: Diagnostic[] = [];
 
-      for (const argv of commands) {
-        let spawned;
-        try {
-          spawned = await runCommand(argv, work, options.timeoutMs ?? defaultTimeoutMs);
-        } catch (error) {
-          // A command that hung is a verdict on the implementation. A command that could not be
-          // started at all is a verdict on the configuration, so that one keeps travelling.
-          if (!(error instanceof TimeoutError)) throw error;
-          result.status = 'error';
-          result.reason = (error as Error).message;
-          return;
-        }
-        const run: CommandRun = { argv, ...spawned };
-        result.runs.push(run);
-
-        const rejected = invocationFailure(run);
-        if (rejected) {
-          result.status = 'error';
-          result.reason = rejected;
-          return;
-        }
-
-        let diagnostics: Diagnostic[];
-        try {
-          diagnostics = parseDiagnostics(run.stdout);
-        } catch (error) {
-          result.status = 'error';
-          result.reason = `'${argv.join(' ')}': ${(error as Error).message}`;
-          return;
-        }
-
-        // Ordering is asserted per command: each invocation must emit its own diagnostics in the
-        // mandated order. Concatenating two commands' outputs says nothing about either.
-        const violation = findOrderingViolation(diagnostics);
-        if (violation && !result.ordering) result.ordering = violation;
-
-        for (const diagnostic of diagnostics) {
-          const key = fingerprint(diagnostic);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          union.push(diagnostic);
-        }
-      }
-
+    for (const argv of commands) {
+      let spawned;
       try {
-        const comparison = compareDiagnostics(corpusCase.expected, union);
-        result.missing = comparison.missing;
-        result.unexpected = comparison.unexpected;
+        spawned = await runCommand(argv, work, options.timeoutMs ?? defaultTimeoutMs);
       } catch (error) {
+        // A command that hung is a verdict on the implementation. A command that could not be
+        // started at all is a verdict on the configuration, so that one keeps travelling.
+        if (!(error instanceof TimeoutError)) throw error;
         result.status = 'error';
         result.reason = (error as Error).message;
         return;
       }
+      const run: CommandRun = { argv, ...spawned };
+      result.runs.push(run);
 
-      if (result.missing.length > 0 || result.unexpected.length > 0 || result.ordering) {
-        result.status = 'fail';
+      const rejected = invocationFailure(run);
+      if (rejected) {
+        result.status = 'error';
+        result.reason = rejected;
+        return;
       }
-    },
-  );
+
+      let diagnostics: Diagnostic[];
+      try {
+        diagnostics = parseDiagnostics(run.stdout);
+      } catch (error) {
+        result.status = 'error';
+        result.reason = `'${argv.join(' ')}': ${(error as Error).message}`;
+        return;
+      }
+
+      // Ordering is asserted per command: each invocation must emit its own diagnostics in the
+      // mandated order. Concatenating two commands' outputs says nothing about either.
+      const violation = findOrderingViolation(diagnostics);
+      if (violation && !result.ordering) result.ordering = violation;
+
+      for (const diagnostic of diagnostics) {
+        const key = fingerprint(diagnostic);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        union.push(diagnostic);
+      }
+    }
+
+    try {
+      const comparison = compareDiagnostics(testCase.expected, union);
+      result.missing = comparison.missing;
+      result.unexpected = comparison.unexpected;
+    } catch (error) {
+      result.status = 'error';
+      result.reason = (error as Error).message;
+      return;
+    }
+
+    if (result.missing.length > 0 || result.unexpected.length > 0 || result.ordering) {
+      result.status = 'fail';
+    }
+  });
 
   return result;
 }
 
-/** Run the corpus and produce the report. Throws only on a corpus or command-configuration fault. */
-export async function runCorpus(options: RunOptions): Promise<Report> {
+/**
+ * Run the conformance tests and produce the report. Throws only on a conformance-tests or
+ * command-configuration fault.
+ */
+export async function runCases(options: RunOptions): Promise<Report> {
   const commands = options.commands.map((command) => withJsonFormat(splitCommand(command)));
-  const corpus = await discoverCorpus(options);
+  const discovered = await discoverCases(options);
 
   const cases: CaseResult[] = [];
-  for (const corpusCase of corpus.cases) {
-    cases.push(await runCase(corpusCase, commands, options));
+  for (const testCase of discovered.cases) {
+    cases.push(await runCase(testCase, commands, options));
   }
-  for (const skip of corpus.skipped) {
+  for (const skip of discovered.skipped) {
     cases.push({
       name: skip.name,
       status: 'skip',
@@ -155,7 +153,7 @@ export async function runCorpus(options: RunOptions): Promise<Report> {
 
   return {
     schema: reportSchema,
-    spec: corpus.source,
+    spec: discovered.source,
     commands: options.commands,
     cases,
     summary: {

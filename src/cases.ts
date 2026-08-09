@@ -9,10 +9,10 @@ export type { SkippedCase } from './types.js';
 
 const run = promisify(execFile);
 
-/** The corpus lives at this path inside a spec checkout. */
-export const corpusRelative = join('conformance', 'cases');
+/** The conformance tests live at this path inside a spec checkout. */
+export const casesRelative = join('conformance', 'cases');
 
-export interface CorpusCase {
+export interface TestCase {
   name: string;
   dir: string;
   /** The fixture repository to run the implementation against. */
@@ -20,16 +20,16 @@ export interface CorpusCase {
   expected: Diagnostic[];
 }
 
-export interface Corpus {
+export interface CaseSet {
   source: SpecSource;
-  cases: CorpusCase[];
+  cases: TestCase[];
   skipped: SkippedCase[];
 }
 
-export class CorpusError extends Error {
+export class CasesError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'CorpusError';
+    this.name = 'CasesError';
   }
 }
 
@@ -51,9 +51,9 @@ async function git(cwd: string, args: string[]): Promise<string | undefined> {
 }
 
 /**
- * Name the revision the corpus came from, so a result is attributable to a spec state rather than
- * to "whatever was on disk". A checkout that is not a Git working tree still runs; it is simply
- * reported without a revision, and no caller should mistake it for a pinned one.
+ * Name the revision the conformance tests came from, so a result is attributable to a spec state
+ * rather than to "whatever was on disk". A checkout that is not a Git working tree still runs; it is
+ * simply reported without a revision, and no caller should mistake it for a pinned one.
  */
 export async function describeSpec(root: string, casesDir: string): Promise<SpecSource> {
   const source: SpecSource = { cases: casesDir, root };
@@ -72,11 +72,11 @@ export async function describeSpec(root: string, casesDir: string): Promise<Spec
  * Load one case directory.
  *
  * A case this runner cannot execute is skipped by name and reason, never dropped. `expected.json`
- * carrying anything beyond `diagnostics` is the corpus reaching for the case-format extension the
+ * carrying anything beyond `diagnostics` is the case reaching for the case-format extension the
  * apply cases need (an apply invocation, an expected exit code, a working-tree outcome); running
  * such a case on the diagnostics rules alone would report a pass for half a case.
  */
-async function loadCase(dir: string, name: string): Promise<CorpusCase | SkippedCase> {
+async function loadCase(dir: string, name: string): Promise<TestCase | SkippedCase> {
   const repoDir = join(dir, 'repo');
   const expectedFile = join(dir, 'expected.json');
 
@@ -118,27 +118,29 @@ async function loadCase(dir: string, name: string): Promise<CorpusCase | Skipped
 }
 
 export interface DiscoverOptions {
-  /** A spec checkout; the corpus is read from its conformance/cases directory. */
+  /** A spec checkout; the conformance tests are read from its conformance/cases directory. */
   spec?: string;
-  /** An explicit corpus directory, which wins over `spec`. */
+  /** An explicit conformance tests directory, which wins over `spec`. */
   cases?: string;
   /** Run only these case names. */
   only?: string[];
 }
 
-/** Discover the corpus, in directory order, which is the corpus's own stable order. */
-export async function discoverCorpus(options: DiscoverOptions): Promise<Corpus> {
+/** Discover the conformance tests, in directory order, which is their own stable order. */
+export async function discoverCases(options: DiscoverOptions): Promise<CaseSet> {
   const casesDir = options.cases
     ? resolve(options.cases)
     : options.spec
-      ? join(resolve(options.spec), corpusRelative)
+      ? join(resolve(options.spec), casesRelative)
       : undefined;
 
   if (!casesDir) {
-    throw new CorpusError('no corpus given: pass --spec <spec checkout> or --cases <directory>');
+    throw new CasesError(
+      'no conformance tests given: pass --spec <spec checkout> or --cases <directory>',
+    );
   }
   if (!(await isDirectory(casesDir))) {
-    throw new CorpusError(`no conformance corpus at ${casesDir}`);
+    throw new CasesError(`no conformance tests at ${casesDir}`);
   }
 
   const entries = (await readdir(casesDir, { withFileTypes: true }))
@@ -149,7 +151,7 @@ export async function discoverCorpus(options: DiscoverOptions): Promise<Corpus> 
   if (options.only && options.only.length > 0) {
     const missing = options.only.filter((name) => !entries.includes(name));
     if (missing.length > 0) {
-      throw new CorpusError(`no such case in ${casesDir}: ${missing.join(', ')}`);
+      throw new CasesError(`no such case in ${casesDir}: ${missing.join(', ')}`);
     }
   }
 
@@ -157,7 +159,7 @@ export async function discoverCorpus(options: DiscoverOptions): Promise<Corpus> 
     ? entries.filter((n) => options.only?.includes(n))
     : entries;
 
-  const cases: CorpusCase[] = [];
+  const cases: TestCase[] = [];
   const skipped: SkippedCase[] = [];
   for (const name of selected) {
     const loaded = await loadCase(join(casesDir, name), name);

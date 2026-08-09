@@ -5,7 +5,7 @@ export const reportSchema = 'pdac-lint/conformance-report/v0';
 export const digestReportSchema = 'pdac-lint/digest-report/v0';
 
 /**
- * The fields a runner compares, from the corpus rules (`conformance/README.md`, "Comparing
+ * The fields a runner compares, from the conformance test rules (`conformance/README.md`, "Comparing
  * diagnostics"). `message` is implementation-defined and is deliberately absent.
  */
 export const comparedFields = ['severity', 'code', 'file', 'artifact', 'field', 'target'] as const;
@@ -63,7 +63,7 @@ export interface SkippedCase {
 }
 
 export interface SpecSource {
-  /** Absolute path to the corpus directory the cases were read from. */
+  /** Absolute path to the cases directory the cases were read from. */
   cases: string;
   /** Absolute path to the spec checkout, when one was given. */
   root?: string;
@@ -95,7 +95,7 @@ export type PinKind = 'ledger' | 'marker';
 /**
  * What was found about one pinned digest. The four sound statuses are `match`,
  * `differs-as-expected` (the case expects stale or tampered), `unresolved-as-expected` and
- * `malformed-as-expected`; the rest are corpus defects.
+ * `malformed-as-expected`; the rest are test-case defects.
  */
 export type PinStatus =
   | 'match'
@@ -131,7 +131,7 @@ export interface DigestSummary {
 export interface DigestReport {
   schema: typeof digestReportSchema;
   spec: SpecSource;
-  /** One entry per pinned digest, in corpus order then path order. */
+  /** One entry per pinned digest, in case order then path order. */
   pins: PinResult[];
   skipped: SkippedCase[];
   summary: DigestSummary;

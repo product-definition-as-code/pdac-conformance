@@ -182,7 +182,7 @@ export async function runCommand(
 /**
  * Copy a fixture to a scratch directory and run `body` there.
  *
- * The corpus is read-only input: an implementation that writes generated outputs (the reference
+ * The conformance tests are read-only input: an implementation that writes generated outputs (the reference
  * one refreshes `.product/generated/` on every validate) would otherwise dirty the spec checkout
  * it was pointed at, and the second run would no longer test the same fixture as the first.
  */

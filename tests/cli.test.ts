@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { exitCodes, runCli } from '../src/cli.js';
 import type { DigestReport, Report } from '../src/types.js';
 
-const corpusDir = fileURLToPath(new URL('./fixtures/corpus', import.meta.url));
-const digestCorpusDir = fileURLToPath(new URL('./fixtures/digest-corpus', import.meta.url));
+const casesDir = fileURLToPath(new URL('./fixtures/cases', import.meta.url));
+const digestCasesDir = fileURLToPath(new URL('./fixtures/digest-cases', import.meta.url));
 const fakeImpl = fileURLToPath(new URL('./fixtures/impl/fake-impl.mjs', import.meta.url));
 
 /** The scripted implementation, quoted so a path with spaces survives the split. */
@@ -41,7 +41,7 @@ describe('pdac-lint run', () => {
     const { code, report: json } = await report(
       'run',
       '--cases',
-      corpusDir,
+      casesDir,
       '--case',
       'pass-case',
       '--command',
@@ -56,7 +56,7 @@ describe('pdac-lint run', () => {
     const { code, report: json } = await report(
       'run',
       '--cases',
-      corpusDir,
+      casesDir,
       '--case',
       'fail-missing',
       '--command',
@@ -78,7 +78,7 @@ describe('pdac-lint run', () => {
     const { code, report: json } = await report(
       'run',
       '--cases',
-      corpusDir,
+      casesDir,
       '--case',
       'fail-unexpected',
       '--command',
@@ -95,7 +95,7 @@ describe('pdac-lint run', () => {
     const { code, report: json } = await report(
       'run',
       '--cases',
-      corpusDir,
+      casesDir,
       '--case',
       'error-bad-json',
       '--command',
@@ -110,7 +110,7 @@ describe('pdac-lint run', () => {
     const one = await report(
       'run',
       '--cases',
-      corpusDir,
+      casesDir,
       '--case',
       'union-case',
       '--command',
@@ -122,7 +122,7 @@ describe('pdac-lint run', () => {
     const both = await report(
       'run',
       '--cases',
-      corpusDir,
+      casesDir,
       '--case',
       'union-case',
       '--command',
@@ -136,50 +136,50 @@ describe('pdac-lint run', () => {
   });
 
   it('reports skipped cases by name and reason, and never as passes', async () => {
-    const { report: json } = await report('run', '--cases', corpusDir, '--command', command());
+    const { report: json } = await report('run', '--cases', casesDir, '--command', command());
     const skipped = json.cases.filter((c) => c.status === 'skip');
     expect(skipped.map((c) => c.name)).toEqual(['skip-extended-format', 'skip-no-expected']);
     expect(json.summary.skipped).toBe(2);
     expect(json.summary.passed + json.summary.failed + json.summary.errored).toBe(5);
   });
 
-  it('runs against a copy, leaving the corpus untouched', async () => {
-    await invoke('run', '--cases', corpusDir, '--case', 'pass-case', '--command', command());
-    await expect(access(join(corpusDir, 'pass-case', 'repo', 'ran.txt'))).rejects.toThrow();
+  it('runs against a copy, leaving the conformance tests untouched', async () => {
+    await invoke('run', '--cases', casesDir, '--case', 'pass-case', '--command', command());
+    await expect(access(join(casesDir, 'pass-case', 'repo', 'ran.txt'))).rejects.toThrow();
   });
 
-  it('names the corpus source in the text report', async () => {
+  it('names the spec source in the text report', async () => {
     const result = await invoke(
       'run',
       '--cases',
-      corpusDir,
+      casesDir,
       '--case',
       'pass-case',
       '--command',
       command(),
     );
-    expect(result.out).toContain('Corpus:');
+    expect(result.out).toContain('Conformance:');
     expect(result.out).toContain('pass  pass-case');
     expect(result.out).toContain('1 case(s): 1 passed');
   });
 });
 
 describe('pdac-lint digests', () => {
-  it('verifies a corpus whose pins still hold', async () => {
-    const result = await invoke('digests', '--cases', digestCorpusDir, '--case', 'current-pin');
+  it('verifies conformance tests whose pins still hold', async () => {
+    const result = await invoke('digests', '--cases', digestCasesDir, '--case', 'current-pin');
     expect(result.code).toBe(exitCodes.success);
     expect(result.out).toMatch(/1 pinned digest\(s\) verified/);
   });
 
-  it('fails a corpus whose pin no longer matches, naming both digests', async () => {
-    const result = await invoke('digests', '--cases', digestCorpusDir, '--case', 'stale-pin');
+  it('fails conformance tests whose pin no longer matches, naming both digests', async () => {
+    const result = await invoke('digests', '--cases', digestCasesDir, '--case', 'stale-pin');
     expect(result.code).toBe(exitCodes.conformanceFailures);
     expect(result.out).toMatch(/mismatch/);
     expect(result.out).toMatch(/recomputed/);
   });
 
   it('emits the digest report schema under --format json', async () => {
-    const result = await invoke('digests', '--cases', digestCorpusDir, '--format', 'json');
+    const result = await invoke('digests', '--cases', digestCasesDir, '--format', 'json');
     const json = JSON.parse(result.out) as DigestReport;
     expect(json.schema).toBe('pdac-lint/digest-report/v0');
     expect(json.summary).toMatchObject({ total: 2, verified: 1, failed: 1, cases: 2 });
@@ -187,36 +187,36 @@ describe('pdac-lint digests', () => {
   });
 
   it('needs no implementation command', async () => {
-    const result = await invoke('digests', '--cases', digestCorpusDir, '--case', 'current-pin');
+    const result = await invoke('digests', '--cases', digestCasesDir, '--case', 'current-pin');
     expect(result.err).not.toMatch(/no implementation to run/);
   });
 
-  it('requires a corpus', async () => {
+  it('requires conformance tests', async () => {
     const result = await invoke('digests');
     expect(result.code).toBe(exitCodes.invalidInvocation);
-    expect(result.err).toMatch(/no corpus given/);
+    expect(result.err).toMatch(/no conformance tests given/);
   });
 
   /**
    * A gate that verified nothing must not read as a gate that passed. Exit 2 is already the code
    * for "there was nothing to run", so finding no pins joins it rather than inventing a status.
    */
-  it('refuses to report success when the corpus pins nothing', async () => {
-    const result = await invoke('digests', '--cases', corpusDir);
+  it('refuses to report success when the conformance tests pin nothing', async () => {
+    const result = await invoke('digests', '--cases', casesDir);
     expect(result.code).toBe(exitCodes.invalidInvocation);
     expect(result.err).toMatch(/no pinned digests/);
   });
 });
 
 describe('pdac-lint invocation', () => {
-  it('requires a corpus', async () => {
+  it('requires conformance tests', async () => {
     const result = await invoke('run', '--command', command());
     expect(result.code).toBe(exitCodes.invalidInvocation);
-    expect(result.err).toMatch(/no corpus given/);
+    expect(result.err).toMatch(/no conformance tests given/);
   });
 
   it('requires an implementation command', async () => {
-    const result = await invoke('run', '--cases', corpusDir);
+    const result = await invoke('run', '--cases', casesDir);
     expect(result.code).toBe(exitCodes.invalidInvocation);
     expect(result.err).toMatch(/no implementation to run/);
   });
@@ -227,7 +227,7 @@ describe('pdac-lint invocation', () => {
   });
 
   it('rejects an unknown report format', async () => {
-    const result = await invoke('run', '--cases', corpusDir, '--command', 'x', '--format', 'yaml');
+    const result = await invoke('run', '--cases', casesDir, '--command', 'x', '--format', 'yaml');
     expect(result.code).toBe(exitCodes.invalidInvocation);
     expect(result.err).toMatch(/unknown format/);
   });
@@ -236,7 +236,7 @@ describe('pdac-lint invocation', () => {
     const result = await invoke(
       'run',
       '--cases',
-      corpusDir,
+      casesDir,
       '--case',
       'pass-case',
       '--command',

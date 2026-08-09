@@ -1,10 +1,10 @@
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
-import { CorpusError } from './corpus.js';
+import { CasesError } from './cases.js';
 import { verifyDigests } from './digests.js';
 import { CommandError } from './execute.js';
 import { renderDigestJson, renderDigestText, renderJson, renderText } from './report.js';
-import { defaultTimeoutMs, runCorpus } from './run.js';
+import { defaultTimeoutMs, runCases } from './run.js';
 
 /** The spec's exit codes (spec/validation.md), applied to the runner itself. */
 export const exitCodes = {
@@ -29,12 +29,12 @@ export function version(): string {
 export const usage = `pdac-lint - conformance runner for Product Definition as Code
 
 Usage:
-  pdac-lint run [options]       run the corpus against an implementation
-  pdac-lint digests [options]   verify the digests the corpus pins, no implementation needed
+  pdac-lint run [options]       run the conformance tests against an implementation
+  pdac-lint digests [options]   verify the digests the conformance tests pin, no implementation needed
 
 Options:
   --spec <path>       spec checkout holding conformance/cases (env: PDAC_SPEC)
-  --cases <dir>       corpus directory, overriding --spec
+  --cases <dir>       conformance tests directory, overriding --spec
   --command <argv>    implementation command to run against each fixture, repeatable;
                       --format json is appended when absent
   --case <name>       run only this case, repeatable
@@ -47,7 +47,7 @@ Options:
 Exit codes:
   0  every case passed (skipped cases are reported, never counted as evidence)
   1  a case failed or errored
-  2  invalid invocation, no corpus to run, or no pinned digests to verify
+  2  invalid invocation, no conformance tests to run, or no pinned digests to verify
   3  unexpected internal failure
 
 Examples:
@@ -109,21 +109,21 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
   const spec = values.spec ?? io.env.PDAC_SPEC;
   if (!spec && !values.cases) {
     io.err(
-      'error: no corpus given: pass --spec <spec checkout>, --cases <directory>, or PDAC_SPEC',
+      'error: no conformance tests given: pass --spec <spec checkout>, --cases <directory>, or PDAC_SPEC',
     );
     io.err(usage);
     return exitCodes.invalidInvocation;
   }
 
   // The digest check reads the fixtures and nothing else: it needs no implementation, and it must
-  // not depend on one, or the corpus would be checking its own integrity through the very thing
-  // it exists to judge.
+  // not depend on one, or the conformance tests would be checking their own integrity through the
+  // very thing they exist to judge.
   if (command === 'digests') {
     let digests;
     try {
       digests = await verifyDigests({ spec, cases: values.cases, only: values.case });
     } catch (error) {
-      if (error instanceof CorpusError) {
+      if (error instanceof CasesError) {
         io.err(`error: ${error.message}`);
         return exitCodes.invalidInvocation;
       }
@@ -131,7 +131,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
     }
     io.out(format === 'json' ? renderDigestJson(digests) : renderDigestText(digests));
     // A gate that verified nothing must not read as a gate that passed. Finding no pins is the
-    // same kind of outcome as finding no corpus: the command could not do its job, which is exit
+    // same kind of outcome as finding no conformance tests: the command could not do its job, which is exit
     // 2, not a clean bill of health.
     if (digests.summary.total === 0) {
       io.err(`error: no pinned digests found in ${digests.spec.cases}`);
@@ -158,7 +158,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
 
   let report;
   try {
-    report = await runCorpus({
+    report = await runCases({
       spec,
       cases: values.cases,
       only: values.case,
@@ -167,7 +167,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
       timeoutMs,
     });
   } catch (error) {
-    if (error instanceof CorpusError || error instanceof CommandError) {
+    if (error instanceof CasesError || error instanceof CommandError) {
       io.err(`error: ${error.message}`);
       return exitCodes.invalidInvocation;
     }

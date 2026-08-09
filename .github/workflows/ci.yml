@@ -43,8 +43,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
 
-  corpus:
-    name: runner against the real corpus
+  conformance:
+    name: runner against the real conformance tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -55,16 +55,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      # Pinned to the spec release this runner was verified against, not floating main: a corpus
-      # that moves under the job makes a red build ambiguous between "the runner regressed" and
-      # "the spec changed". Bump the ref deliberately when a new spec release is verified.
+      # Pinned to the spec release this runner was verified against, not floating main: a set of
+      # conformance tests that moves under the job makes a red build ambiguous between "the runner
+      # regressed" and "the spec changed". Bump the ref deliberately when a new spec release is verified.
       - name: check out the spec
         uses: actions/checkout@v6
         with:
           repository: product-definition-as-code/spec
           ref: v0.1.0
           path: spec
-      # The corpus checking its own integrity, before any implementation is involved. A pin that no
+      # The conformance tests checking their own integrity, before any implementation is involved. A pin that no
       # longer matches the artifact it cites makes every citation case downstream of it meaningless,
       # so it is worth knowing separately from any verdict about an implementation.
       #
@@ -76,7 +76,7 @@ jobs:
           node dist/bin.js digests --spec ./spec > digests.txt 2>&1 || status=$?
           cat digests.txt
           {
-            echo '### pinned digests in the spec corpus'
+            echo '### pinned digests in the spec conformance tests'
             echo ''
             echo '```text'
             cat digests.txt
@@ -87,21 +87,21 @@ jobs:
             exit "$status"
           fi
           if [ "$status" -eq 1 ]; then
-            echo "::warning::the spec corpus pins a digest that no longer matches its artifact"
+            echo "::warning::the spec conformance tests pin a digest that no longer matches its artifact"
           fi
       # The implementation under test is installed, not vendored: this job measures a published
-      # CLI against a published corpus, which is the claim a badge would eventually carry.
+      # CLI against published conformance tests, which is the claim a badge would eventually carry.
       - name: install the reference implementation
         run: |
           npm install --global @prodshape/cli@0.8.0
           prodshape --version || true
-      # The runner's own reason to exist. No single command covers the corpus, so each is
+      # The runner's own reason to exist. No single command covers the conformance tests, so each is
       # configured and their findings are unioned: baseline diagnostics come from `validate`,
       # overlay diagnostics from `change validate`, and citation diagnostics (PRODUCT042,
       # PRODUCT060-063) from `citations verify`.
       #
       # `citations verify` takes `specs` because the command defaults its scan root to `openspec/`
-      # while the corpus fixtures put consumer documents in `specs/`.
+      # while the conformance test fixtures put consumer documents in `specs/`.
       #
       # This job gates the runner, not the implementation. A case the implementation fails is a
       # true verdict about the implementation and must not turn this repository's build red, so
@@ -116,7 +116,7 @@ jobs:
             --command "prodshape citations verify specs" > report.txt 2>&1 || status=$?
           cat report.txt
           {
-            echo '### pdac-lint against the spec corpus'
+            echo '### pdac-lint against the spec conformance tests'
             echo ''
             echo '```text'
             cat report.txt

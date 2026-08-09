@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { discoverCorpus, type CorpusCase, type DiscoverOptions } from './corpus.js';
+import { discoverCases, type TestCase, type DiscoverOptions } from './cases.js';
 import { digestReportSchema, type Diagnostic, type DigestReport, type PinResult } from './types.js';
 
 /** A well-formed content digest, as `spec/validation.md` renders one. */
@@ -17,7 +17,7 @@ const ledgerKeys = new Set(['id', 'digest', 'anchor']);
 /** Baseline artifacts live here; a change proposal's artifacts deliberately do not count. */
 const modelRelative = join('docs', 'product', 'model');
 
-/** Statuses that mean the pin is sound. Everything else is a corpus defect. */
+/** Statuses that mean the pin is sound. Everything else is a test-case defect. */
 const sound = new Set<PinResult['status']>([
   'match',
   'differs-as-expected',
@@ -54,7 +54,7 @@ export class LedgerError extends Error {
  * Read the citation records of a ledger.
  *
  * The specification fixes the citation record shape and not a serialization, so this reads the
- * shape the corpus uses and refuses anything else. A ledger this cannot read is reported as a
+ * shape the conformance tests use and refuses anything else. A ledger this cannot read is reported as a
  * skipped case rather than silently contributing no pins, because a ledger that looks checked
  * and is not is worse than one that is openly skipped.
  */
@@ -200,14 +200,10 @@ function expects(expected: Diagnostic[], id: string | undefined, codes: string[]
   );
 }
 
-async function judge(
-  corpusCase: CorpusCase,
-  pin: Pin,
-  index: Map<string, string>,
-): Promise<PinResult> {
+async function judge(testCase: TestCase, pin: Pin, index: Map<string, string>): Promise<PinResult> {
   const result: PinResult = {
-    case: corpusCase.name,
-    source: relative(corpusCase.dir, pin.path).split(sep).join('/'),
+    case: testCase.name,
+    source: relative(testCase.dir, pin.path).split(sep).join('/'),
     kind: pin.kind,
     id: pin.id,
     anchor: pin.anchor,
@@ -216,20 +212,20 @@ async function judge(
   };
 
   if (!digestPattern.test(pin.digest)) {
-    return expects(corpusCase.expected, pin.id, ['PRODUCT042'])
+    return expects(testCase.expected, pin.id, ['PRODUCT042'])
       ? { ...result, status: 'malformed-as-expected' }
       : { ...result, status: 'malformed' };
   }
 
   const target = pin.id === undefined ? undefined : index.get(pin.id);
   if (target === undefined) {
-    return expects(corpusCase.expected, pin.id, ['PRODUCT060'])
+    return expects(testCase.expected, pin.id, ['PRODUCT060'])
       ? { ...result, status: 'unresolved-as-expected' }
       : { ...result, status: 'unresolved' };
   }
 
   const recomputed = digestBytes(await readFile(target));
-  const mustDiffer = expects(corpusCase.expected, pin.id, ['PRODUCT061', 'PRODUCT062']);
+  const mustDiffer = expects(testCase.expected, pin.id, ['PRODUCT061', 'PRODUCT062']);
   if (mustDiffer) {
     return recomputed === pin.digest
       ? { ...result, recomputed, status: 'unexpected-match' }
@@ -241,7 +237,7 @@ async function judge(
 }
 
 /**
- * Verify every digest the corpus pins.
+ * Verify every digest the conformance tests pin.
  *
  * A pin is expected to match the artifact it cites, except where the case exists because it does
  * not: a case expecting `PRODUCT061` or `PRODUCT062` pins a digest that must differ, and this
@@ -249,35 +245,35 @@ async function judge(
  * fixture faithful is caught rather than quietly destroying the case.
  */
 export async function verifyDigests(options: DiscoverOptions): Promise<DigestReport> {
-  const corpus = await discoverCorpus(options);
+  const discovered = await discoverCases(options);
   const pins: PinResult[] = [];
-  const skipped = [...corpus.skipped];
+  const skipped = [...discovered.skipped];
 
-  for (const corpusCase of corpus.cases) {
-    const index = await baselineIndex(corpusCase.repoDir);
+  for (const testCase of discovered.cases) {
+    const index = await baselineIndex(testCase.repoDir);
     let collected: Pin[];
     try {
-      collected = await collectPins(corpusCase.repoDir);
+      collected = await collectPins(testCase.repoDir);
     } catch (error) {
-      skipped.push({ name: corpusCase.name, reason: (error as Error).message });
+      skipped.push({ name: testCase.name, reason: (error as Error).message });
       continue;
     }
     for (const pin of collected) {
-      pins.push(await judge(corpusCase, pin, index));
+      pins.push(await judge(testCase, pin, index));
     }
   }
 
   const failed = pins.filter((pin) => !sound.has(pin.status)).length;
   return {
     schema: digestReportSchema,
-    spec: corpus.source,
+    spec: discovered.source,
     pins,
     skipped,
     summary: {
       total: pins.length,
       verified: pins.length - failed,
       failed,
-      cases: corpus.cases.length,
+      cases: discovered.cases.length,
     },
   };
 }

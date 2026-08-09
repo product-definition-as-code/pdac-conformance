@@ -20,7 +20,7 @@ export function formatDiagnostic(diagnostic: Diagnostic): string {
   return `${head} ${location}${relation}`;
 }
 
-/** Name the corpus source: a revision when there is one, the path when there is not. */
+/** Name the spec source: a revision when there is one, the path when there is not. */
 export function formatSource(spec: SpecSource): string {
   if (!spec.revision) return `${spec.cases} (unversioned)`;
   const details = [spec.revision.slice(0, 7)];
@@ -59,7 +59,7 @@ function caseDetail(result: CaseResult, lines: string[]): void {
 /** The human report: one line per case, details under the ones that did not pass. */
 export function renderText(report: Report): string {
   const lines: string[] = [];
-  lines.push(`Corpus: ${formatSource(report.spec)}`);
+  lines.push(`Conformance: ${formatSource(report.spec)}`);
   for (const command of report.commands) lines.push(`Implementation: ${command}`);
   lines.push('');
 
@@ -95,7 +95,7 @@ const quiet = new Set<PinStatus>(['match', 'differs-as-expected']);
  */
 export function renderDigestText(report: DigestReport): string {
   const lines: string[] = [];
-  lines.push(`Corpus: ${formatSource(report.spec)}`);
+  lines.push(`Conformance: ${formatSource(report.spec)}`);
   lines.push('');
 
   for (const pin of report.pins) {

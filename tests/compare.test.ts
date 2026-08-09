@@ -128,7 +128,7 @@ describe('compareDiagnostics', () => {
     expect(compareDiagnostics(expected, actual)).toEqual({ missing: [], unexpected: [] });
   });
 
-  it('rejects an expectation asserting a field the corpus rules never compare', () => {
+  it('rejects an expectation asserting a field the conformance test rules never compare', () => {
     expect(() => compareDiagnostics([{ ...warning, message: 'nope' } as Diagnostic], [])).toThrow(
       UncomparableFieldError,
     );
