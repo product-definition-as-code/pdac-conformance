@@ -89,8 +89,8 @@ interface CaseOptions {
   proposed?: string;
 }
 
-/** Write one synthetic corpus with a single case, and return the corpus directory. */
-async function corpusWith(options: CaseOptions): Promise<string> {
+/** Write one synthetic case set with a single case, and return its directory. */
+async function casesWith(options: CaseOptions): Promise<string> {
   const cases = await mkdtemp(join(tmpdir(), 'pdac-lint-digests-'));
   const caseDir = join(cases, 'synthetic-case');
   const model = join(caseDir, 'repo', 'docs', 'product', 'model', 'requirements', 'functional');
@@ -161,13 +161,13 @@ describe('digest normalization', () => {
 
 describe('ledger pins', () => {
   it('verifies a pin that matches', async () => {
-    const report = await verifyDigests({ cases: await corpusWith({ pinned: currentDigest }) });
+    const report = await verifyDigests({ cases: await casesWith({ pinned: currentDigest }) });
     expect(report.summary).toMatchObject({ total: 1, verified: 1, failed: 0 });
     expect(report.pins[0]).toMatchObject({ status: 'match', kind: 'ledger', id: 'FR-EXAMPLE-001' });
   });
 
   it('reports a pin that no longer matches, with both digests', async () => {
-    const report = await verifyDigests({ cases: await corpusWith({ pinned: wrongDigest }) });
+    const report = await verifyDigests({ cases: await casesWith({ pinned: wrongDigest }) });
     expect(report.summary).toMatchObject({ verified: 0, failed: 1 });
     expect(report.pins[0]).toMatchObject({
       status: 'mismatch',
@@ -178,21 +178,21 @@ describe('ledger pins', () => {
 
   it('reports a malformed pin', async () => {
     const report = await verifyDigests({
-      cases: await corpusWith({ pinned: 'sha256:NOTADIGEST' }),
+      cases: await casesWith({ pinned: 'sha256:NOTADIGEST' }),
     });
     expect(report.pins.map((p) => p.status)).toEqual(['malformed']);
   });
 
   it('reports a pin whose target does not resolve', async () => {
     const report = await verifyDigests({
-      cases: await corpusWith({ pinned: currentDigest, citedId: 'FR-ABSENT-001' }),
+      cases: await casesWith({ pinned: currentDigest, citedId: 'FR-ABSENT-001' }),
     });
     expect(report.pins.map((p) => p.status)).toEqual(['unresolved']);
   });
 
   it('accepts an unresolved target when the case expects PRODUCT060', async () => {
     const report = await verifyDigests({
-      cases: await corpusWith({
+      cases: await casesWith({
         pinned: currentDigest,
         citedId: 'FR-ABSENT-001',
         expected: [{ code: 'PRODUCT060', target: 'FR-ABSENT-001' }],
@@ -203,7 +203,7 @@ describe('ledger pins', () => {
 
   it('resolves the baseline artifact, never a change proposal carrying the same id', async () => {
     const report = await verifyDigests({
-      cases: await corpusWith({
+      cases: await casesWith({
         pinned: currentDigest,
         proposed: artifact.replace('MUST do the thing', 'MUST do the other thing'),
       }),
@@ -215,7 +215,7 @@ describe('ledger pins', () => {
 describe('marker-block pins', () => {
   it('checks a pin recorded in a marker block', async () => {
     const report = await verifyDigests({
-      cases: await corpusWith({ pinned: wrongDigest, marker: true }),
+      cases: await casesWith({ pinned: wrongDigest, marker: true }),
     });
     expect(report.pins[0]).toMatchObject({ status: 'mismatch', kind: 'marker' });
     expect(report.pins[0]?.source).toContain('feature.md');
@@ -225,7 +225,7 @@ describe('marker-block pins', () => {
 describe('pins a case needs to differ', () => {
   it('accepts a differing pin when the case expects tampered', async () => {
     const report = await verifyDigests({
-      cases: await corpusWith({
+      cases: await casesWith({
         pinned: wrongDigest,
         marker: true,
         expected: [{ code: 'PRODUCT062', artifact: 'FR-EXAMPLE-001' }],
@@ -237,7 +237,7 @@ describe('pins a case needs to differ', () => {
 
   it('reports a pin that matches where the case needs it to differ', async () => {
     const report = await verifyDigests({
-      cases: await corpusWith({
+      cases: await casesWith({
         pinned: currentDigest,
         marker: true,
         expected: [{ code: 'PRODUCT062', artifact: 'FR-EXAMPLE-001' }],
@@ -249,7 +249,7 @@ describe('pins a case needs to differ', () => {
 
   it('reads the expectation per artifact, not per case', async () => {
     const report = await verifyDigests({
-      cases: await corpusWith({
+      cases: await casesWith({
         pinned: wrongDigest,
         expected: [{ code: 'PRODUCT062', artifact: 'FR-SOMETHING-ELSE' }],
       }),
@@ -285,7 +285,7 @@ describe('a pin carrying no id', () => {
   });
 });
 
-describe('a corpus with nothing to verify', () => {
+describe('a case set with nothing to verify', () => {
   it('does not report success for having checked nothing', async () => {
     const cases = await mkdtemp(join(tmpdir(), 'pdac-lint-digests-'));
     const caseDir = join(cases, 'pinless-case');
@@ -298,8 +298,8 @@ describe('a corpus with nothing to verify', () => {
 });
 
 describe('report shape', () => {
-  it('carries the schema, the corpus source and a stable pin order', async () => {
-    const report = await verifyDigests({ cases: await corpusWith({ pinned: currentDigest }) });
+  it('carries the schema, the spec source and a stable pin order', async () => {
+    const report = await verifyDigests({ cases: await casesWith({ pinned: currentDigest }) });
     expect(report.schema).toBe('pdac-lint/digest-report/v0');
     expect(report.spec.cases).toContain('pdac-lint-digests-');
     expect(report.summary.cases).toBe(1);

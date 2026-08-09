@@ -3,31 +3,31 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CorpusError, describeSpec, discoverCorpus } from '../src/corpus.js';
+import { CasesError, describeSpec, discoverCases } from '../src/cases.js';
 
-const corpusDir = fileURLToPath(new URL('./fixtures/corpus', import.meta.url));
+const casesDir = fileURLToPath(new URL('./fixtures/cases', import.meta.url));
 
-describe('discoverCorpus', () => {
+describe('discoverCases', () => {
   it('loads runnable cases and records why the others were skipped', async () => {
-    const corpus = await discoverCorpus({ cases: corpusDir });
+    const discovered = await discoverCases({ cases: casesDir });
 
-    expect(corpus.cases.map((c) => c.name)).toEqual([
+    expect(discovered.cases.map((c) => c.name)).toEqual([
       'error-bad-json',
       'fail-missing',
       'fail-unexpected',
       'pass-case',
       'union-case',
     ]);
-    expect(Object.fromEntries(corpus.skipped.map((s) => [s.name, s.reason]))).toEqual({
+    expect(Object.fromEntries(discovered.skipped.map((s) => [s.name, s.reason]))).toEqual({
       'skip-no-expected': 'no expected.json',
       'skip-extended-format': expect.stringContaining('unknown keys: invocation, exitCode'),
     });
   });
 
   it('reads the expectations of a case', async () => {
-    const corpus = await discoverCorpus({ cases: corpusDir, only: ['pass-case'] });
-    expect(corpus.cases).toHaveLength(1);
-    expect(corpus.cases[0]?.expected).toEqual([
+    const discovered = await discoverCases({ cases: casesDir, only: ['pass-case'] });
+    expect(discovered.cases).toHaveLength(1);
+    expect(discovered.cases[0]?.expected).toEqual([
       {
         severity: 'warning',
         code: 'PRODUCT108',
@@ -37,18 +37,18 @@ describe('discoverCorpus', () => {
     ]);
   });
 
-  it('rejects a case name the corpus does not have', async () => {
-    await expect(discoverCorpus({ cases: corpusDir, only: ['no-such-case'] })).rejects.toThrow(
+  it('rejects a case name the conformance tests do not have', async () => {
+    await expect(discoverCases({ cases: casesDir, only: ['no-such-case'] })).rejects.toThrow(
       /no such case/,
     );
   });
 
-  it('rejects a directory that holds no corpus', async () => {
-    await expect(discoverCorpus({ cases: `${corpusDir}/nowhere` })).rejects.toThrow(CorpusError);
+  it('rejects a directory that holds no conformance tests', async () => {
+    await expect(discoverCases({ cases: `${casesDir}/nowhere` })).rejects.toThrow(CasesError);
   });
 
-  it('requires a corpus location', async () => {
-    await expect(discoverCorpus({})).rejects.toThrow(/no corpus given/);
+  it('requires a conformance tests location', async () => {
+    await expect(discoverCases({})).rejects.toThrow(/no conformance tests given/);
   });
 });
 
@@ -56,15 +56,15 @@ describe('describeSpec', () => {
   it('reports a directory outside any Git work tree without a revision', async () => {
     const outside = await mkdtemp(join(tmpdir(), 'pdac-lint-nogit-'));
     try {
-      const source = await describeSpec(outside, corpusDir);
-      expect(source).toEqual({ cases: corpusDir, root: outside });
+      const source = await describeSpec(outside, casesDir);
+      expect(source).toEqual({ cases: casesDir, root: outside });
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
   });
 
   it('names the revision of a Git checkout', async () => {
-    const source = await describeSpec(fileURLToPath(new URL('..', import.meta.url)), corpusDir);
+    const source = await describeSpec(fileURLToPath(new URL('..', import.meta.url)), casesDir);
     expect(source.revision).toMatch(/^[0-9a-f]{40}$/);
     expect(typeof source.dirty).toBe('boolean');
   });

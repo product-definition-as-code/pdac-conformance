@@ -4,7 +4,7 @@
 // It reads its scripted response from `impl.json` (or `impl-<variant>.json`) inside the fixture
 // repository it was run in, prints the recorded stdout verbatim and exits with the recorded code.
 // That keeps the runner's tests free of any real implementation, and it writes `ran.txt` so a test
-// can prove the command ran against a copy rather than against the corpus itself.
+// can prove the command ran against a copy rather than against the fixture itself.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);

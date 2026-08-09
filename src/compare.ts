@@ -5,11 +5,11 @@ import {
   type OrderingViolation,
 } from './types.js';
 
-/** A diagnostic key an expected entry may not assert, because the corpus rules never compare it. */
+/** A diagnostic key an expected entry may not assert, because the conformance test rules never compare it. */
 export class UncomparableFieldError extends Error {
   constructor(readonly fields: string[]) {
     super(
-      `expected.json asserts ${fields.map((f) => `'${f}'`).join(', ')}, which the corpus rules do not compare (compared fields: ${comparedFields.join(', ')})`,
+      `expected.json asserts ${fields.map((f) => `'${f}'`).join(', ')}, which the conformance test rules do not compare (compared fields: ${comparedFields.join(', ')})`,
     );
     this.name = 'UncomparableFieldError';
   }
@@ -30,7 +30,7 @@ export function toComparable(diagnostic: Diagnostic): Diagnostic {
 /**
  * Validate a case's expectations: each may assert any subset of the compared fields and nothing
  * else. An entry asserting `message` would demand something the spec leaves to the implementation,
- * so it is an error in the corpus rather than a failure of the implementation under test.
+ * so it is an error in the test case rather than a failure of the implementation under test.
  */
 export function assertExpectedShape(expected: Diagnostic[]): void {
   const offenders = new Set<string>();
@@ -130,7 +130,7 @@ function matchPairs(expected: Diagnostic[], actual: Diagnostic[]): Map<number, n
 /**
  * Compare emitted diagnostics against a case's expectations.
  *
- * Both lists are sorted by the mandated key first, so the report reads in corpus order. What is
+ * Both lists are sorted by the mandated key first, so the report reads in case order. What is
  * left unpaired is the failure: expectations nothing satisfied are missing, emitted diagnostics no
  * expectation accounts for are unexpected.
  */
