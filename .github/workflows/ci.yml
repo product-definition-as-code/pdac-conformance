@@ -93,7 +93,7 @@ jobs:
       # CLI against published conformance tests, which is the claim a badge would eventually carry.
       - name: install the reference implementation
         run: |
-          npm install --global @prodshape/cli@0.8.0
+          npm install --global @prodshape/cli@0.8.1
           prodshape --version || true
       # The runner's own reason to exist. No single command covers the conformance tests, so each is
       # configured and their findings are unioned: baseline diagnostics come from `validate`,
