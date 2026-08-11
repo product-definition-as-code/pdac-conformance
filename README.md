@@ -20,24 +20,39 @@ Point `run` at a spec checkout and tell it how to invoke the implementation unde
 
 ```bash
 git clone --depth 1 https://github.com/product-definition-as-code/spec.git
+pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate" --command "prodshape citations verify specs"
+```
+
+```text
+Conformance: /work/spec @ 034d1f4, main
+Implementation: prodshape validate
+Implementation: prodshape change validate
+Implementation: prodshape citations verify specs
+
+  pass  artifact-kinds-valid
+  pass  change-open-questions
+  pass  citation-current
+  pass  citation-tampered-and-stale
+  pass  dedicated-topology
+  pass  greenfield-first-increment
+
+6 case(s): 6 passed, 0 failed, 0 skipped, 0 errored
+```
+
+A pass is only as honest as the run behind it, and the runner does not excuse a surface that was never exercised. Leave the citation command out and the citation case fails instead of passing by silence:
+
+```bash
 pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate"
 ```
 
 ```text
-Conformance: /work/spec @ e75643e, main
-Implementation: prodshape validate
-Implementation: prodshape change validate
-
-  pass  change-open-questions
-  pass  citation-current
   fail  citation-tampered-and-stale
     missing:    error PRODUCT062 specs/feature-x.md [FR-VALIDATE-001]
-  pass  greenfield-first-increment
 
-4 case(s): 3 passed, 1 failed, 0 skipped, 0 errored
+6 case(s): 5 passed, 1 failed, 0 skipped, 0 errored
 ```
 
-That failure is real and is the point of the tool. That test case requires a citation whose embedded projection was hand-edited and whose target also moved to report `PRODUCT062` alone; the reference implementation reports it as `stale` instead, and no command it offers exposes citation diagnostics in the machine-readable envelope. A runner that hid either fact would be a badge that certifies nothing.
+`PRODUCT062` only ever comes from citation verification, so a command set that cannot emit it does not get credit for it. A runner that hid that would be a badge that certifies nothing.
 
 ### Options
 
@@ -64,9 +79,9 @@ pdac-lint digests --spec ./spec
 ```
 
 ```text
-Conformance: /work/spec @ d18339e, main
+Conformance: /work/spec @ 034d1f4, main
 
-4 pinned digest(s) verified across 5 case(s)
+4 pinned digest(s) verified across 6 case(s)
 ```
 
 A pin is expected to match the artifact it cites, except in a case that exists because it does not. A case expecting `PRODUCT061` or `PRODUCT062` for an artifact pins a digest that must differ from that artifact's current content, and this asserts the difference rather than excusing it, so an edit that accidentally makes a tampered fixture faithful is reported instead of quietly voiding the case. The same holds for `PRODUCT060` and `PRODUCT042`. The expectation is read per artifact, never per case: a stale citation against one requirement says nothing about a pin against another.
@@ -81,13 +96,7 @@ Finding no pins at all exits `2`, not `0`. A gate that verified nothing must not
 
 ### More than one command
 
-A single implementation command rarely covers the whole spec. The reference implementation reports Product Change overlay diagnostics from `change validate` and baseline diagnostics from `validate`, so a run that means to check both passes both:
-
-```bash
-pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate"
-```
-
-Diagnostics from every command are unioned and deduplicated before the comparison. Each command is still required to emit its own diagnostics in the mandated order.
+A single implementation command rarely covers the whole spec. The reference implementation reports baseline diagnostics from `validate`, Product Change overlay diagnostics from `change validate`, and citation diagnostics from `citations verify`, so a run that means to check all three passes all three, exactly as the usage above does. Diagnostics from every command are unioned and deduplicated before the comparison. Each command is still required to emit its own diagnostics in the mandated order.
 
 ## What a case must satisfy
 
