@@ -73,12 +73,16 @@ export function parseLedger(text: string, where: string): Record<string, string>
       line = line.slice(2).trim();
     }
     if (!current || !line.includes(':')) {
-      throw new LedgerError(`${where}:${lineNumber}: unexpected line ${JSON.stringify(raw)}`);
+      throw new LedgerError(
+        `${where}:${lineNumber}: unexpected line ${JSON.stringify(raw)}: expected a citation record entry ('- id: ...', 'digest: ...', 'anchor: ...')`,
+      );
     }
     const separator = line.indexOf(':');
     const key = line.slice(0, separator).trim();
     if (!ledgerKeys.has(key)) {
-      throw new LedgerError(`${where}:${lineNumber}: unexpected key ${JSON.stringify(key)}`);
+      throw new LedgerError(
+        `${where}:${lineNumber}: unexpected key ${JSON.stringify(key)}: a citation record carries id, digest and anchor`,
+      );
     }
     current[key] = line.slice(separator + 1).trim();
   }

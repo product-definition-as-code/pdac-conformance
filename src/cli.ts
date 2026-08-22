@@ -90,12 +90,12 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
 
   const [command, ...rest] = positionals;
   if (command === undefined) {
-    io.err('error: no command given');
+    io.err("error: no command given: expected 'run' or 'digests'");
     io.err(usage);
     return exitCodes.invalidInvocation;
   }
   if ((command !== 'run' && command !== 'digests') || rest.length > 0) {
-    io.err(`error: unknown command '${[command, ...rest].join(' ')}'`);
+    io.err(`error: unknown command '${[command, ...rest].join(' ')}': expected 'run' or 'digests'`);
     io.err(usage);
     return exitCodes.invalidInvocation;
   }
