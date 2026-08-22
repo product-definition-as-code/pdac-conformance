@@ -2,7 +2,7 @@
 
 Independent conformance runner for the [Product Definition as Code specification](https://github.com/product-definition-as-code/spec).
 
-It checks whether a PDaC implementation follows the specification. It does not validate an ordinary product repository — that is `prodshape validate` — and it does not decide whether product claims are true — that is `prodshape citations verify`: commands like those are what the runner measures, not what it is.
+It checks whether a PDaC implementation follows the specification. It does not validate an ordinary product repository and it does not verify a delivery document's recorded citations against the canonical model — those are `prodshape validate` and `prodshape citations verify`, two commands of [ProductShape](https://github.com/juangcarmona/productshape), the reference implementation of Product Definition as Code: what the runner measures, not what it is. No tool decides whether product claims are true; people do.
 
 It runs the spec's conformance tests against any implementation's CLI. The tests are versioned with the spec. Each test says which diagnostics an implementation must emit, and the runner compares what the implementation actually emits against that. The conformance tests are the authority; the runner only applies their comparison rules. It never reads an implementation's internals, so an implementation cannot vouch for itself.
 

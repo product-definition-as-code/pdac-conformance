@@ -81,7 +81,7 @@ export function parseLedger(text: string, where: string): Record<string, string>
     const key = line.slice(0, separator).trim();
     if (!ledgerKeys.has(key)) {
       throw new LedgerError(
-        `${where}:${lineNumber}: unexpected key ${JSON.stringify(key)}: a citation record carries id, digest and anchor`,
+        `${where}:${lineNumber}: unexpected key ${JSON.stringify(key)}: a citation record carries id, digest and, optionally, anchor`,
       );
     }
     current[key] = line.slice(separator + 1).trim();
