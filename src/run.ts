@@ -38,8 +38,10 @@ function fingerprint(diagnostic: Diagnostic): string {
  * itself did not happen, so the case is an error rather than a failure.
  */
 function invocationFailure(run: CommandRun): string | undefined {
-  if (run.exitCode === 2) return `'${run.argv.join(' ')}' rejected the invocation (exit 2)`;
-  if (run.exitCode >= 3) return `'${run.argv.join(' ')}' failed (exit ${run.exitCode})`;
+  if (run.exitCode === 2)
+    return `'${run.argv.join(' ')}' rejected the invocation (exit 2); expected exit 0 or 1 with JSON diagnostics on stdout`;
+  if (run.exitCode >= 3)
+    return `'${run.argv.join(' ')}' failed (exit ${run.exitCode}); expected exit 0 or 1 with JSON diagnostics on stdout`;
   return undefined;
 }
 

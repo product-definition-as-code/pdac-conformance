@@ -106,6 +106,20 @@ describe('pdac-lint run', () => {
     expect(json.cases[0]?.reason).toMatch(/not JSON/);
   });
 
+  it('names the command each relayed stream came from under an errored case', async () => {
+    const result = await invoke(
+      'run',
+      '--cases',
+      casesDir,
+      '--case',
+      'error-bad-json',
+      '--command',
+      command(),
+    );
+    expect(result.out).toMatch(/stderr of '.+fake-impl/);
+    expect(result.out).toMatch(/stdout of '.+fake-impl/);
+  });
+
   it('unions the diagnostics of every configured command', async () => {
     const one = await report(
       'run',
@@ -222,7 +236,9 @@ describe('pdac-lint invocation', () => {
   });
 
   it('rejects an unknown command and an unknown flag', async () => {
-    expect((await invoke('badge')).code).toBe(exitCodes.invalidInvocation);
+    const unknown = await invoke('badge');
+    expect(unknown.code).toBe(exitCodes.invalidInvocation);
+    expect(unknown.err).toMatch(/expected 'run' or 'digests'/);
     expect((await invoke('run', '--nope')).code).toBe(exitCodes.invalidInvocation);
   });
 

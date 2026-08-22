@@ -48,9 +48,12 @@ function caseDetail(result: CaseResult, lines: string[]): void {
     );
   }
   if (result.status === 'error') {
+    // More than one command may have run before the case errored; name the one each stream
+    // belongs to, or the reader is left matching output to commands by guesswork.
     for (const run of result.runs) {
-      if (run.stderr.trim()) lines.push(`    stderr: ${truncate(run.stderr)}`);
-      if (run.stdout.trim()) lines.push(`    stdout: ${truncate(run.stdout)}`);
+      const command = run.argv.join(' ');
+      if (run.stderr.trim()) lines.push(`    stderr of '${command}': ${truncate(run.stderr)}`);
+      if (run.stdout.trim()) lines.push(`    stdout of '${command}': ${truncate(run.stdout)}`);
     }
   }
   if (result.workDir) lines.push(`    kept: ${result.workDir}`);
