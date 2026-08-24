@@ -102,7 +102,7 @@ A single implementation command rarely covers the whole spec. The reference impl
 
 ## What a case must satisfy
 
-Each case is a directory under `conformance/cases/` holding a fixture repository (`repo/`), the diagnostics an implementation must produce (`expected.json`), and prose citing the clause under test (`case.md`).
+Each case is a directory under `conformance/cases/` holding a fixture repository (`repo/`), the diagnostics an implementation must produce and any asserted exit code (`expected.json`), and prose citing the clause under test (`case.md`).
 
 For every case the runner copies `repo/` to a scratch directory, runs each configured command there with `--format json`, and compares. The conformance tests are never written to: an implementation that refreshes generated outputs would otherwise change the fixture it was measured against.
 
@@ -116,13 +116,13 @@ The comparison follows the spec's own rules, from `conformance/README.md`:
 
 Diagnostics from multiple commands are deduplicated only when all nine compared fields are equal. `line` and `entry` are numeric and identify, respectively, a one-based payload line and a one-based sidecar citation entry.
 
-An implementation exiting `1` is normal: it means the fixture legitimately contains errors. Exit `2` or `3`, output that is not JSON, or a command that hangs makes the case an **error** rather than a failure, because the run produced no verdict.
+An `expected.json` may assert `exitCode` from the specification's `0`-`3` table. The assertion applies independently to every configured implementation command, and a mismatch fails the case without suppressing diagnostic parsing, ordering or maximum matching. When no code is asserted, exit `0` or `1` is a normal validation verdict; exit `2` or `3` makes the case an **error**. Output that is not JSON or a command that hangs is always an error because the run produced no diagnostic verdict.
 
-A case this runner cannot execute is reported as **skipped**, with the reason, and never counted as evidence. That includes any `expected.json` reaching beyond `diagnostics`, which is how the conformance tests will express an apply invocation, an expected exit code and a working-tree outcome once that case format exists.
+A case this runner cannot execute is reported as **skipped**, with the reason, and never counted as evidence. That includes an `expected.json` reaching beyond `diagnostics` and `exitCode`, such as the invocation and working-tree outcome the apply cases require.
 
 ## Scope
 
-This runner covers cases expressible as a fixture repository plus expected diagnostics. It does not yet cover the two apply cases (`apply-not-approved`, `apply-baseline-drift`), which need a case format the spec deferred until a runner existed. This is that runner, so that discussion is now unblocked.
+This runner covers cases expressible as a fixture repository plus expected diagnostics and an optional exit code. It does not yet cover the apply cases, which additionally need a case format for their invocation, Git history and working-tree outcome.
 
 There is no GitHub Action and no badge yet. Conformance tests first, runner second, badge last. When a badge ships it will state exactly what was checked, spec version, conformance level and profile, never a bare "PDaC conformant".
 

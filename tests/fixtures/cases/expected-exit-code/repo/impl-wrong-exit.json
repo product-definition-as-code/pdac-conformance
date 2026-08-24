@@ -1,0 +1,4 @@
+{
+  "exit": 1,
+  "stdout": "{\"diagnostics\":[{\"severity\":\"error\",\"code\":\"PRODUCT050\",\"message\":\"invalid configuration\",\"file\":\".product/config.yaml\"}]}"
+}

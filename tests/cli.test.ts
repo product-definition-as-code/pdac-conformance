@@ -106,6 +106,96 @@ describe('pdac-lint run', () => {
     expect(json.cases[0]?.reason).toMatch(/not JSON/);
   });
 
+  it('accepts an asserted exit 2 while still comparing diagnostics', async () => {
+    const { code, report: json } = await report(
+      'run',
+      '--cases',
+      casesDir,
+      '--case',
+      'expected-exit-code',
+      '--command',
+      command(),
+    );
+    expect(code).toBe(exitCodes.success);
+    expect(json.cases[0]).toMatchObject({
+      status: 'pass',
+      expectedExitCode: 2,
+      exitCodeMismatches: [],
+      missing: [],
+      unexpected: [],
+    });
+    expect(json.cases[0]?.runs[0]?.exitCode).toBe(2);
+  });
+
+  it('fails an asserted exit-code mismatch without discarding matched diagnostics', async () => {
+    const { code, report: json } = await report(
+      'run',
+      '--cases',
+      casesDir,
+      '--case',
+      'expected-exit-code',
+      '--command',
+      command('wrong-exit'),
+    );
+    expect(code).toBe(exitCodes.conformanceFailures);
+    expect(json.cases[0]).toMatchObject({
+      status: 'fail',
+      expectedExitCode: 2,
+      exitCodeMismatches: [{ expected: 2, actual: 1 }],
+      missing: [],
+      unexpected: [],
+    });
+  });
+
+  it('applies the asserted exit code to every configured command', async () => {
+    const { code, report: json } = await report(
+      'run',
+      '--cases',
+      casesDir,
+      '--case',
+      'expected-exit-code',
+      '--command',
+      command(),
+      '--command',
+      command('wrong-exit'),
+    );
+    expect(code).toBe(exitCodes.conformanceFailures);
+    expect(json.cases[0]?.runs).toHaveLength(2);
+    expect(json.cases[0]?.exitCodeMismatches).toEqual([
+      expect.objectContaining({ expected: 2, actual: 1 }),
+    ]);
+    expect(json.cases[0]?.missing).toEqual([]);
+    expect(json.cases[0]?.unexpected).toEqual([]);
+  });
+
+  it('still reports missing diagnostics when the asserted exit code matches', async () => {
+    const { code, report: json } = await report(
+      'run',
+      '--cases',
+      casesDir,
+      '--case',
+      'expected-exit-code',
+      '--command',
+      command('missing-diagnostic'),
+    );
+    expect(code).toBe(exitCodes.conformanceFailures);
+    expect(json.cases[0]?.exitCodeMismatches).toEqual([]);
+    expect(json.cases[0]?.missing).toHaveLength(1);
+  });
+
+  it('renders an expected exit-code mismatch in the text report', async () => {
+    const result = await invoke(
+      'run',
+      '--cases',
+      casesDir,
+      '--case',
+      'expected-exit-code',
+      '--command',
+      command('wrong-exit'),
+    );
+    expect(result.out).toMatch(/exit code:\s+expected 2, got 1/);
+  });
+
   it('names the command each relayed stream came from under an errored case', async () => {
     const result = await invoke(
       'run',
@@ -152,9 +242,13 @@ describe('pdac-lint run', () => {
   it('reports skipped cases by name and reason, and never as passes', async () => {
     const { report: json } = await report('run', '--cases', casesDir, '--command', command());
     const skipped = json.cases.filter((c) => c.status === 'skip');
-    expect(skipped.map((c) => c.name)).toEqual(['skip-extended-format', 'skip-no-expected']);
-    expect(json.summary.skipped).toBe(2);
-    expect(json.summary.passed + json.summary.failed + json.summary.errored).toBe(5);
+    expect(skipped.map((c) => c.name)).toEqual([
+      'skip-extended-format',
+      'skip-invalid-exit-code',
+      'skip-no-expected',
+    ]);
+    expect(json.summary.skipped).toBe(3);
+    expect(json.summary.passed + json.summary.failed + json.summary.errored).toBe(6);
   });
 
   it('runs against a copy, leaving the conformance tests untouched', async () => {
