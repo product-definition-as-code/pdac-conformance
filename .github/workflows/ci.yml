@@ -100,8 +100,8 @@ jobs:
       # overlay diagnostics from `change validate`, and citation diagnostics (PRODUCT042,
       # PRODUCT060-063) from `citations verify`.
       #
-      # `citations verify` takes `specs` because the command defaults its scan root to `openspec/`
-      # while the conformance test fixtures put consumer documents in `specs/`.
+      # `citations verify` takes the fixture root so cases without a `specs/` directory still
+      # produce a verdict; citation discovery scopes itself within each fixture repository.
       #
       # This job gates the runner, not the implementation. A case the implementation fails is a
       # true verdict about the implementation and must not turn this repository's build red, so
@@ -113,7 +113,7 @@ jobs:
           node dist/bin.js run --spec ./spec \
             --command "prodshape validate" \
             --command "prodshape change validate" \
-            --command "prodshape citations verify specs" > report.txt 2>&1 || status=$?
+            --command "prodshape citations verify ." > report.txt 2>&1 || status=$?
           cat report.txt
           {
             echo '### pdac-lint against the spec conformance tests'
