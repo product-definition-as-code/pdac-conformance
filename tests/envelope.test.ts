@@ -12,12 +12,21 @@ describe('parseDiagnostics', () => {
           message: 'open questions remain',
           file: 'change.md',
           artifact: 'CHG-EXAMPLE',
+          change: 'CHG-EXAMPLE',
+          line: 12,
         },
       ],
       summary: { errors: 0, warnings: 1 },
     });
     expect(parseDiagnostics(stdout)).toEqual([
-      { severity: 'warning', code: 'PRODUCT108', file: 'change.md', artifact: 'CHG-EXAMPLE' },
+      {
+        severity: 'warning',
+        code: 'PRODUCT108',
+        file: 'change.md',
+        artifact: 'CHG-EXAMPLE',
+        change: 'CHG-EXAMPLE',
+        line: 12,
+      },
     ]);
   });
 
@@ -45,5 +54,10 @@ describe('parseDiagnostics', () => {
 
   it('rejects a non-string compared field', () => {
     expect(() => parseDiagnostics('{"diagnostics":[{"code":108}]}')).toThrow(/non-string 'code'/);
+  });
+
+  it('reads numeric locations and rejects string locations', () => {
+    expect(parseDiagnostics('{"diagnostics":[{"entry":3}]}')).toEqual([{ entry: 3 }]);
+    expect(() => parseDiagnostics('{"diagnostics":[{"line":"12"}]}')).toThrow(/non-number 'line'/);
   });
 });

@@ -1,4 +1,4 @@
 {
   "exit": 0,
-  "stdout": "{\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"PRODUCT061\",\"message\":\"citation is stale\",\"file\":\"specs/feature.md\",\"target\":\"FR-EXAMPLE-001\"}]}"
+  "stdout": "{\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"PRODUCT061\",\"message\":\"citation is stale\",\"file\":\"specs/feature.md\",\"target\":\"FR-EXAMPLE-001\",\"entry\":1}]}"
 }

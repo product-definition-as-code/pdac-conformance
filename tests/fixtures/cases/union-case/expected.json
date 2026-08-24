@@ -9,7 +9,15 @@
       "severity": "warning",
       "code": "PRODUCT061",
       "file": "specs/feature.md",
-      "target": "FR-EXAMPLE-001"
+      "target": "FR-EXAMPLE-001",
+      "entry": 1
+    },
+    {
+      "severity": "warning",
+      "code": "PRODUCT061",
+      "file": "specs/feature.md",
+      "target": "FR-EXAMPLE-001",
+      "line": 2
     }
   ]
 }

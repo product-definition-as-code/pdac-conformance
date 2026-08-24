@@ -8,18 +8,31 @@ export const digestReportSchema = 'pdac-lint/digest-report/v0';
  * The fields a runner compares, from the conformance test rules (`conformance/README.md`, "Comparing
  * diagnostics"). `message` is implementation-defined and is deliberately absent.
  */
-export const comparedFields = ['severity', 'code', 'file', 'artifact', 'field', 'target'] as const;
+export const comparedFields = [
+  'severity',
+  'code',
+  'file',
+  'artifact',
+  'change',
+  'field',
+  'target',
+  'line',
+  'entry',
+] as const;
 
 export type ComparedField = (typeof comparedFields)[number];
 
-/** A diagnostic reduced to its comparable fields. Every field is optional but `severity`/`code`. */
+/** A diagnostic reduced to its comparable fields. Fields are optional for subset expectations. */
 export interface Diagnostic {
   severity?: string;
   code?: string;
   file?: string;
   artifact?: string;
+  change?: string;
   field?: string;
   target?: string;
+  line?: number;
+  entry?: number;
 }
 
 /** One invocation of an implementation command against one fixture. */

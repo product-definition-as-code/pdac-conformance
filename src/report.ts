@@ -10,14 +10,19 @@ import type {
 /** Render one diagnostic as the fields it actually carries, in the spec's field order. */
 export function formatDiagnostic(diagnostic: Diagnostic): string {
   const head = [diagnostic.severity ?? '?', diagnostic.code ?? '?'].join(' ');
-  const location = diagnostic.artifact
-    ? `${diagnostic.file ?? '?'} [${diagnostic.artifact}]`
-    : (diagnostic.file ?? '?');
-  const relation =
-    diagnostic.field || diagnostic.target
-      ? ` (${[diagnostic.field, diagnostic.target].filter(Boolean).join(' -> ')})`
-      : '';
-  return `${head} ${location}${relation}`;
+  const details: [string, string | number | undefined][] = [
+    ['artifact', diagnostic.artifact],
+    ['change', diagnostic.change],
+    ['field', diagnostic.field],
+    ['target', diagnostic.target],
+    ['line', diagnostic.line],
+    ['entry', diagnostic.entry],
+  ];
+  const rendered = details
+    .filter((detail): detail is [string, string | number] => detail[1] !== undefined)
+    .map(([field, value]) => ` [${field} ${value}]`)
+    .join('');
+  return `${head} ${diagnostic.file ?? '?'}${rendered}`;
 }
 
 /** Name the spec source: a revision when there is one, the path when there is not. */

@@ -49,7 +49,7 @@ pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape 
 
 ```text
   fail  citation-tampered-and-stale
-    missing:    error PRODUCT062 specs/feature-x.md [FR-VALIDATE-001]
+    missing:    error PRODUCT062 specs/feature-x.md [target FR-VALIDATE-001]
 
 6 case(s): 5 passed, 1 failed, 0 skipped, 0 errored
 ```
@@ -108,11 +108,13 @@ For every case the runner copies `repo/` to a scratch directory, runs each confi
 
 The comparison follows the spec's own rules, from `conformance/README.md`:
 
-- `severity`, `code`, `file`, `artifact`, `field` and `target` are compared;
+- `severity`, `code`, `file`, `artifact`, `change`, `field`, `target`, `line` and `entry` are compared;
 - `message` is implementation-defined and is never compared;
 - a field absent from an expected diagnostic is not asserted;
 - expected and emitted diagnostics are paired maximally, so an expectation naming only a code is satisfied by any emitted diagnostic carrying it, and each emitted diagnostic answers at most one expectation. Whatever is left unpaired is reported: expectations nothing satisfied are **missing**, emitted diagnostics nothing expected are **unexpected**;
-- diagnostics must be emitted in the order the spec mandates, by file then code then target, which is checked per command.
+- diagnostics must be emitted in the order the spec mandates: `file`, `line`, `entry`, `code`, `field`, `target`, `artifact`, then `change`. Absent numeric locations sort before present ones, numbers sort numerically and strings sort by Unicode code point. Ordering is checked per command.
+
+Diagnostics from multiple commands are deduplicated only when all nine compared fields are equal. `line` and `entry` are numeric and identify, respectively, a one-based payload line and a one-based sidecar citation entry.
 
 An implementation exiting `1` is normal: it means the fixture legitimately contains errors. Exit `2` or `3`, output that is not JSON, or a command that hangs makes the case an **error** rather than a failure, because the run produced no verdict.
 
