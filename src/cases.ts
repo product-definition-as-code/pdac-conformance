@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { Diagnostic, SkippedCase, SpecSource } from './types.js';
+import type { Diagnostic, ExpectedExitCode, SkippedCase, SpecSource } from './types.js';
 
 export type { SkippedCase } from './types.js';
 
@@ -18,6 +18,8 @@ export interface TestCase {
   /** The fixture repository to run the implementation against. */
   repoDir: string;
   expected: Diagnostic[];
+  /** When present, every configured implementation command must return this code. */
+  expectedExitCode?: ExpectedExitCode;
 }
 
 export interface CaseSet {
@@ -71,10 +73,9 @@ export async function describeSpec(root: string, casesDir: string): Promise<Spec
 /**
  * Load one case directory.
  *
- * A case this runner cannot execute is skipped by name and reason, never dropped. `expected.json`
- * carrying anything beyond `diagnostics` is the case reaching for the case-format extension the
- * apply cases need (an apply invocation, an expected exit code, a working-tree outcome); running
- * such a case on the diagnostics rules alone would report a pass for half a case.
+ * A case this runner cannot execute is skipped by name and reason, never dropped. `exitCode` is the
+ * supported case-level assertion beyond diagnostics. An invocation or working-tree assertion still
+ * reaches for the apply-case extension; running it partially would report a pass for half a case.
  */
 async function loadCase(dir: string, name: string): Promise<TestCase | SkippedCase> {
   const repoDir = join(dir, 'repo');
@@ -101,7 +102,7 @@ async function loadCase(dir: string, name: string): Promise<TestCase | SkippedCa
   }
 
   const keys = Object.keys(parsed);
-  const unknown = keys.filter((key) => key !== 'diagnostics');
+  const unknown = keys.filter((key) => key !== 'diagnostics' && key !== 'exitCode');
   if (unknown.length > 0) {
     return {
       name,
@@ -114,7 +115,24 @@ async function loadCase(dir: string, name: string): Promise<TestCase | SkippedCa
     return { name, reason: "expected.json has no 'diagnostics' array" };
   }
 
-  return { name, dir, repoDir, expected: diagnostics as Diagnostic[] };
+  const rawExitCode = (parsed as { exitCode?: unknown }).exitCode;
+  if (
+    rawExitCode !== undefined &&
+    rawExitCode !== 0 &&
+    rawExitCode !== 1 &&
+    rawExitCode !== 2 &&
+    rawExitCode !== 3
+  ) {
+    return { name, reason: "expected.json 'exitCode' must be an integer from 0 to 3" };
+  }
+
+  return {
+    name,
+    dir,
+    repoDir,
+    expected: diagnostics as Diagnostic[],
+    ...(rawExitCode === undefined ? {} : { expectedExitCode: rawExitCode }),
+  };
 }
 
 export interface DiscoverOptions {

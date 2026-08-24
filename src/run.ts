@@ -14,6 +14,7 @@ import {
   type CaseResult,
   type CommandRun,
   type Diagnostic,
+  type ExpectedExitCode,
   type Report,
 } from './types.js';
 
@@ -34,11 +35,15 @@ function fingerprint(diagnostic: Diagnostic): string {
 }
 
 /**
- * Exit `1` means the implementation found errors, which for a fixture designed to contain them is
- * the correct outcome. `2` and `3` are the spec's invocation and internal-failure codes: the run
- * itself did not happen, so the case is an error rather than a failure.
+ * Without an explicit assertion, exit `1` is a normal validation verdict while `2` and `3` mean the
+ * run itself did not happen. An asserted code supersedes these defaults, but never diagnostic
+ * parsing or comparison: the exit code and diagnostics are independent parts of the verdict.
  */
-function invocationFailure(run: CommandRun): string | undefined {
+function invocationFailure(
+  run: CommandRun,
+  expectedExitCode: ExpectedExitCode | undefined,
+): string | undefined {
+  if (expectedExitCode !== undefined) return undefined;
   if (run.exitCode === 2)
     return `'${run.argv.join(' ')}' rejected the invocation (exit 2); expected exit 0 or 1 with JSON diagnostics on stdout`;
   if (run.exitCode >= 3)
@@ -54,6 +59,10 @@ async function runCase(
   const result: CaseResult = {
     name: testCase.name,
     status: 'pass',
+    ...(testCase.expectedExitCode === undefined
+      ? {}
+      : { expectedExitCode: testCase.expectedExitCode }),
+    exitCodeMismatches: [],
     missing: [],
     unexpected: [],
     runs: [],
@@ -80,11 +89,19 @@ async function runCase(
       const run: CommandRun = { argv, ...spawned };
       result.runs.push(run);
 
-      const rejected = invocationFailure(run);
+      const rejected = invocationFailure(run, testCase.expectedExitCode);
       if (rejected) {
         result.status = 'error';
         result.reason = rejected;
         return;
+      }
+
+      if (testCase.expectedExitCode !== undefined && run.exitCode !== testCase.expectedExitCode) {
+        result.exitCodeMismatches.push({
+          argv: run.argv,
+          expected: testCase.expectedExitCode,
+          actual: run.exitCode,
+        });
       }
 
       let diagnostics: Diagnostic[];
@@ -119,7 +136,12 @@ async function runCase(
       return;
     }
 
-    if (result.missing.length > 0 || result.unexpected.length > 0 || result.ordering) {
+    if (
+      result.exitCodeMismatches.length > 0 ||
+      result.missing.length > 0 ||
+      result.unexpected.length > 0 ||
+      result.ordering
+    ) {
       result.status = 'fail';
     }
   });
@@ -144,6 +166,7 @@ export async function runCases(options: RunOptions): Promise<Report> {
       name: skip.name,
       status: 'skip',
       reason: skip.reason,
+      exitCodeMismatches: [],
       missing: [],
       unexpected: [],
       runs: [],

@@ -44,6 +44,16 @@ export interface CommandRun {
   stderr: string;
 }
 
+/** Exit codes the specification assigns to implementation commands. */
+export type ExpectedExitCode = 0 | 1 | 2 | 3;
+
+/** One configured implementation command that did not return the code a case asserts. */
+export interface ExitCodeMismatch {
+  argv: string[];
+  expected: ExpectedExitCode;
+  actual: number;
+}
+
 export type CaseStatus = 'pass' | 'fail' | 'skip' | 'error';
 
 export interface OrderingViolation {
@@ -55,6 +65,10 @@ export interface OrderingViolation {
 export interface CaseResult {
   name: string;
   status: CaseStatus;
+  /** The case-level exit code assertion, applied to every configured implementation command. */
+  expectedExitCode?: ExpectedExitCode;
+  /** Configured commands whose exit code did not satisfy the case-level assertion. */
+  exitCodeMismatches: ExitCodeMismatch[];
   /** Why a case was skipped, or what went wrong for an error. */
   reason?: string;
   /** Expected diagnostics with no matching emitted diagnostic. */

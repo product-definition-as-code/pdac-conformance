@@ -13,6 +13,7 @@ describe('discoverCases', () => {
 
     expect(discovered.cases.map((c) => c.name)).toEqual([
       'error-bad-json',
+      'expected-exit-code',
       'fail-missing',
       'fail-unexpected',
       'pass-case',
@@ -20,13 +21,15 @@ describe('discoverCases', () => {
     ]);
     expect(Object.fromEntries(discovered.skipped.map((s) => [s.name, s.reason]))).toEqual({
       'skip-no-expected': 'no expected.json',
-      'skip-extended-format': expect.stringContaining('unknown keys: invocation, exitCode'),
+      'skip-extended-format': expect.stringContaining('unknown keys: invocation, workingTree'),
+      'skip-invalid-exit-code': "expected.json 'exitCode' must be an integer from 0 to 3",
     });
   });
 
   it('reads the expectations of a case', async () => {
     const discovered = await discoverCases({ cases: casesDir, only: ['pass-case'] });
     expect(discovered.cases).toHaveLength(1);
+    expect(discovered.cases[0]?.expectedExitCode).toBe(0);
     expect(discovered.cases[0]?.expected).toEqual([
       {
         severity: 'warning',
@@ -35,6 +38,12 @@ describe('discoverCases', () => {
         artifact: 'CHG-EXAMPLE',
       },
     ]);
+  });
+
+  it('loads a supported expected exit code', async () => {
+    const discovered = await discoverCases({ cases: casesDir, only: ['expected-exit-code'] });
+    expect(discovered.cases[0]?.expectedExitCode).toBe(2);
+    expect(discovered.skipped).toEqual([]);
   });
 
   it('rejects a case name the conformance tests do not have', async () => {

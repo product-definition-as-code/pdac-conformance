@@ -41,6 +41,11 @@ function truncate(text: string, limit = 2000): string {
 
 function caseDetail(result: CaseResult, lines: string[]): void {
   if (result.reason) lines.push(`    ${result.reason}`);
+  for (const mismatch of result.exitCodeMismatches) {
+    lines.push(
+      `    exit code:  expected ${mismatch.expected}, got ${mismatch.actual} from '${mismatch.argv.join(' ')}'`,
+    );
+  }
   for (const diagnostic of result.missing) {
     lines.push(`    missing:    ${formatDiagnostic(diagnostic)}`);
   }
