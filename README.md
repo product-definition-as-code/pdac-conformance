@@ -22,14 +22,14 @@ Point `run` at a spec checkout and tell it how to invoke the implementation unde
 
 ```bash
 git clone --depth 1 https://github.com/product-definition-as-code/spec.git
-pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate" --command "prodshape citations verify specs"
+pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate" --command "prodshape citations verify ."
 ```
 
 ```text
 Conformance: /work/spec @ 034d1f4, main
 Implementation: prodshape validate
 Implementation: prodshape change validate
-Implementation: prodshape citations verify specs
+Implementation: prodshape citations verify .
 
   pass  artifact-kinds-valid
   pass  change-open-questions
