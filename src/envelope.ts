@@ -12,8 +12,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Read one diagnostic, keeping the compared fields and discarding everything else. A non-string
- * value where the spec defines a string is a defect worth naming, not something to coerce.
+ * Read one diagnostic, keeping the compared fields and discarding everything else. A value of the
+ * wrong primitive type is a defect worth naming, not something to coerce.
  */
 function readDiagnostic(value: unknown, index: number): Diagnostic {
   if (!isRecord(value)) {
@@ -23,10 +23,17 @@ function readDiagnostic(value: unknown, index: number): Diagnostic {
   for (const field of comparedFields) {
     const raw = value[field];
     if (raw === undefined || raw === null) continue;
-    if (typeof raw !== 'string') {
-      throw new EnvelopeError(`diagnostic ${index} has a non-string '${field}'`);
+    if (field === 'line' || field === 'entry') {
+      if (typeof raw !== 'number') {
+        throw new EnvelopeError(`diagnostic ${index} has a non-number '${field}'`);
+      }
+      diagnostic[field] = raw;
+    } else {
+      if (typeof raw !== 'string') {
+        throw new EnvelopeError(`diagnostic ${index} has a non-string '${field}'`);
+      }
+      diagnostic[field] = raw;
     }
-    diagnostic[field] = raw;
   }
   return diagnostic;
 }

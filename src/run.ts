@@ -9,6 +9,7 @@ import {
   withJsonFormat,
 } from './execute.js';
 import {
+  comparedFields,
   reportSchema,
   type CaseResult,
   type CommandRun,
@@ -29,7 +30,7 @@ export interface RunOptions extends DiscoverOptions {
 /** Identify a diagnostic by its compared fields, so the union across commands does not double up. */
 function fingerprint(diagnostic: Diagnostic): string {
   const c = toComparable(diagnostic);
-  return JSON.stringify([c.severity, c.code, c.file, c.artifact, c.field, c.target]);
+  return JSON.stringify(comparedFields.map((field) => c[field]));
 }
 
 /**

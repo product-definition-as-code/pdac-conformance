@@ -1,9 +1,4 @@
-import {
-  comparedFields,
-  type ComparedField,
-  type Diagnostic,
-  type OrderingViolation,
-} from './types.js';
+import { comparedFields, type Diagnostic, type OrderingViolation } from './types.js';
 
 /** A diagnostic key an expected entry may not assert, because the conformance test rules never compare it. */
 export class UncomparableFieldError extends Error {
@@ -22,7 +17,9 @@ export function toComparable(diagnostic: Diagnostic): Diagnostic {
   const result: Diagnostic = {};
   for (const field of comparedFields) {
     const value = diagnostic[field];
-    if (value !== undefined) result[field] = value;
+    if (value === undefined) continue;
+    if (field === 'line' || field === 'entry') result[field] = value as number;
+    else result[field] = value as string;
   }
   return result;
 }
@@ -43,25 +40,60 @@ export function assertExpectedShape(expected: Diagnostic[]): void {
 }
 
 /**
- * The deterministic order the spec mandates: by file, then code, then target. An absent field
- * sorts first, so a diagnostic with no target precedes one that shares its file and code.
+ * The deterministic order the spec mandates. Numeric fields retain `undefined` so the comparator
+ * can distinguish absence from a present value; absent string fields normalize to empty strings.
  */
-export function orderKey(diagnostic: Diagnostic): [string, string, string] {
-  return [diagnostic.file ?? '', diagnostic.code ?? '', diagnostic.target ?? ''];
+export function orderKey(
+  diagnostic: Diagnostic,
+): [string, number | undefined, number | undefined, string, string, string, string, string] {
+  return [
+    diagnostic.file ?? '',
+    diagnostic.line,
+    diagnostic.entry,
+    diagnostic.code ?? '',
+    diagnostic.field ?? '',
+    diagnostic.target ?? '',
+    diagnostic.artifact ?? '',
+    diagnostic.change ?? '',
+  ];
+}
+
+/** Compare strings lexicographically by Unicode code point, independent of locale and ICU data. */
+function compareCodePoints(left: string, right: string): number {
+  const leftPoints = [...left];
+  const rightPoints = [...right];
+  const length = Math.min(leftPoints.length, rightPoints.length);
+  for (let i = 0; i < length; i += 1) {
+    const l = leftPoints[i]?.codePointAt(0) as number;
+    const r = rightPoints[i]?.codePointAt(0) as number;
+    if (l < r) return -1;
+    if (l > r) return 1;
+  }
+  if (leftPoints.length < rightPoints.length) return -1;
+  if (leftPoints.length > rightPoints.length) return 1;
+  return 0;
+}
+
+/** Numeric diagnostic locations sort numerically, with absence before every present value. */
+function compareOptionalNumbers(left: number | undefined, right: number | undefined): number {
+  if (left === undefined) return right === undefined ? 0 : -1;
+  if (right === undefined) return 1;
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function compareByOrderKey(a: Diagnostic, b: Diagnostic): number {
   const left = orderKey(a);
   const right = orderKey(b);
-  for (let i = 0; i < left.length; i += 1) {
-    // Ordering is over identifiers and POSIX paths, so plain code-unit comparison is the
-    // platform-independent one. Locale collation is neither stable nor portable.
-    const l = left[i] as string;
-    const r = right[i] as string;
-    if (l < r) return -1;
-    if (l > r) return 1;
-  }
-  return 0;
+  return (
+    compareCodePoints(left[0], right[0]) ||
+    compareOptionalNumbers(left[1], right[1]) ||
+    compareOptionalNumbers(left[2], right[2]) ||
+    compareCodePoints(left[3], right[3]) ||
+    compareCodePoints(left[4], right[4]) ||
+    compareCodePoints(left[5], right[5]) ||
+    compareCodePoints(left[6], right[6]) ||
+    compareCodePoints(left[7], right[7])
+  );
 }
 
 export function sortDiagnostics(diagnostics: Diagnostic[]): Diagnostic[] {
@@ -73,15 +105,15 @@ export function sortDiagnostics(diagnostics: Diagnostic[]): Diagnostic[] {
  * are asserted; a field absent from the expectation is not asserted at all.
  */
 export function matches(expected: Diagnostic, actual: Diagnostic): boolean {
-  for (const field of Object.keys(expected) as ComparedField[]) {
-    if (expected[field] !== actual[field]) return false;
+  for (const field of comparedFields) {
+    if (Object.hasOwn(expected, field) && expected[field] !== actual[field]) return false;
   }
   return true;
 }
 
 /**
  * Find the first place a list of diagnostics breaks the mandated order. Diagnostics that tie on
- * all three keys may appear in any relative order, so only a strict decrease is a violation.
+ * all eight keys may appear in any relative order, so only a strict decrease is a violation.
  */
 export function findOrderingViolation(actual: Diagnostic[]): OrderingViolation | undefined {
   for (let i = 1; i < actual.length; i += 1) {
