@@ -1,3 +1,6 @@
 # esbuild backs the tsup bundle and installs a platform binary from its own package.
 allowBuilds:
   esbuild: true
+
+packages:
+  - compat/*

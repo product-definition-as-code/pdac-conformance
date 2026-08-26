@@ -28,6 +28,12 @@ jobs:
       - run: pnpm build
       - name: run the built binary
         run: node dist/bin.js --help
+      - name: run the transition command
+        shell: bash
+        run: |
+          node compat/pdac-lint/bin.js --help > transition-output.txt 2> transition-warning.txt
+          grep -Fx 'pdac-lint is deprecated; use pdac-conformance.' transition-warning.txt
+          grep -F 'pdac-conformance run' transition-output.txt
 
   quality:
     name: lint and format
@@ -83,7 +89,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" -ge 2 ]; then
-            echo "::error::pdac-lint digests could not run (exit $status)"
+            echo "::error::pdac-conformance digests could not run (exit $status)"
             exit "$status"
           fi
           if [ "$status" -eq 1 ]; then
@@ -107,7 +113,7 @@ jobs:
       # true verdict about the implementation and must not turn this repository's build red, so
       # only exit 2 and 3, the runner's own faults, fail the step. The report is published either
       # way: a verdict nobody reads is a verdict nobody acts on.
-      - name: pdac-lint run
+      - name: pdac-conformance run
         run: |
           status=0
           node dist/bin.js run --spec ./spec \

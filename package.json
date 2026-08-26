@@ -1,6 +1,6 @@
 {
-  "name": "pdac-lint",
-  "version": "0.2.0",
+  "name": "pdac-conformance",
+  "version": "1.0.0",
   "description": "Conformance runner for the Product Definition as Code specification: run the versioned conformance tests against any implementation CLI and compare the diagnostics it emits.",
   "license": "Apache-2.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "provenance": true
   },
   "bin": {
-    "pdac-lint": "dist/bin.js"
+    "pdac-conformance": "dist/bin.js"
   },
   "files": [
     "dist",
@@ -27,11 +27,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/product-definition-as-code/pdac-lint.git"
+    "url": "git+https://github.com/product-definition-as-code/pdac-conformance.git"
   },
-  "homepage": "https://github.com/product-definition-as-code/pdac-lint#readme",
+  "homepage": "https://github.com/product-definition-as-code/pdac-conformance#readme",
   "bugs": {
-    "url": "https://github.com/product-definition-as-code/pdac-lint/issues"
+    "url": "https://github.com/product-definition-as-code/pdac-conformance/issues"
   },
   "engines": {
     "node": ">=24.0.0"
