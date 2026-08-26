@@ -83,12 +83,14 @@ export interface CaseResult {
 }
 
 export interface ExerciseResult {
+  /** The deterministic perturbation used to make the fixture's relevant surface observable. */
+  kind: 'citation-pin' | 'artifact-type' | 'graph-reference' | 'unprotected';
   /** The cited Product Artifact deliberately changed in this isolated working copy. */
   target: string;
   /** Citation carrier path, relative to the case directory, with POSIX separators. */
   source: string;
   /** The diagnostic that proves the command observed the changed citation target. */
-  expectedCodes: ('PRODUCT061' | 'PRODUCT062')[];
+  expectedCodes: string[];
   status: 'pass' | 'fail' | 'error';
   reason?: string;
   runs: CommandRun[];

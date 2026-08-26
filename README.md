@@ -106,9 +106,9 @@ Claimed values are labels supplied by the caller. The runner does not verify or 
 
 ### Sound zero-diagnostic cases
 
-For a zero-diagnostic fixture that contains a valid citation pin, the runner makes an isolated mutation of each cited baseline artifact and runs every configured command again. The mutation must produce an attributed `PRODUCT061` or `PRODUCT062`. A command that discovers no citation cannot pass the fixture by silence. The recorded exercise results are included in the JSON report.
+For a zero-diagnostic fixture with a valid citation pin, the runner mutates each cited baseline artifact and runs every configured command again. The mutation must produce an attributed `PRODUCT061` or `PRODUCT062`. For a fixture without pins, it mutates every discovered artifact's `type` to an unknown value and requires `PRODUCT003`; where the fixture has a `primary-actor` edge, it also breaks that edge and requires `PRODUCT006` for the missing target. A command that discovers no citation, artifact or graph edge cannot pass by silence. The recorded exercise results are included in the JSON report.
 
-This check applies only where a fixture already carries the data needed for a deterministic mutation. It does not replace specification-side cases for unpinned fixtures or impose a new implementation report envelope.
+The frozen suite's six zero-diagnostic cases are all protected: the three citation cases use pin mutations; `artifact-kinds-valid` and `configuration-custom-root` use per-artifact type mutations; and `dedicated-topology` also uses a broken graph-edge mutation. A future zero-diagnostic fixture with neither a valid pin nor a typed Product Artifact is reported as unprotected and cannot pass. These checks use ordinary specification diagnostics and do not impose an implementation-specific report envelope.
 
 ### More than one command
 

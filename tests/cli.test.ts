@@ -85,6 +85,88 @@ process.exit(diagnostics.length ? 1 : 0);
   };
 }
 
+const noDiagnostics = '{"diagnostics":[]}';
+
+async function writeZeroDiagnosticCase(
+  cases: string,
+  name: string,
+  files: Record<string, string>,
+): Promise<void> {
+  const repo = join(cases, name, 'repo');
+  await mkdir(repo, { recursive: true });
+  for (const [path, content] of Object.entries(files)) {
+    const destination = join(repo, path);
+    await mkdir(join(destination, '..'), { recursive: true });
+    await writeFile(destination, content);
+  }
+  await writeFile(join(cases, name, 'expected.json'), '{"diagnostics":[]}\n');
+  await writeFile(join(repo, 'impl.json'), `{"stdout":${JSON.stringify(noDiagnostics)}}\n`);
+}
+
+function artifact(id: string, type: string, extra = ''): string {
+  return `---
+id: ${id}
+type: ${type}
+${extra}---
+
+## Fixture
+
+An artifact used to exercise the conformance runner.
+`;
+}
+
+/** Six compact analogues of the frozen suite's zero-diagnostic fixture families. */
+async function sixZeroDiagnosticCases(): Promise<string> {
+  const cases = await mkdtemp(join(tmpdir(), 'pdac-conformance-six-zero-'));
+  const cited = artifact('FR-CITATION-001', 'functional-requirement');
+  const citedDigest = digestText(cited);
+  for (const name of ['citation-current', 'digest-bytes-not-text', 'greenfield-first-increment']) {
+    await writeZeroDiagnosticCase(cases, name, {
+      'docs/product/model/requirements/functional/fr-citation-001.md': cited,
+      'specs/feature.citations.yml': `citations:\n  - id: FR-CITATION-001\n    digest: ${citedDigest}\n`,
+    });
+  }
+
+  const kinds = [
+    ['ACT-ALL-KINDS', 'actor'],
+    ['JRN-ALL-KINDS', 'journey'],
+    ['UC-ALL-KINDS', 'use-case'],
+    ['BR-ALL-KINDS', 'business-rule'],
+    ['BC-ALL-KINDS', 'bounded-context'],
+    ['TERM-ALL-KINDS', 'domain-term'],
+    ['FR-ALL-KINDS', 'functional-requirement'],
+    ['QR-ALL-KINDS', 'quality-requirement'],
+    ['CON-ALL-KINDS', 'constraint'],
+  ] as const;
+  const allKinds = Object.fromEntries(
+    kinds.map(([id, type]) => [
+      `docs/product/model/${id.toLowerCase()}.md`,
+      artifact(id, type, type === 'journey' ? 'primary-actor: ACT-ALL-KINDS\n' : ''),
+    ]),
+  );
+  await writeZeroDiagnosticCase(cases, 'artifact-kinds-valid', allKinds);
+
+  await writeZeroDiagnosticCase(cases, 'configuration-custom-root', {
+    '.product/config.yaml': 'version: v1alpha1\nproduct-root: product\n',
+    'product/model/actors/act-config-reader.md': artifact('ACT-CONFIG-READER', 'actor'),
+  });
+
+  await writeZeroDiagnosticCase(cases, 'dedicated-topology', {
+    'docs/product/model/actors/act-validator.md': artifact('ACT-VALIDATOR', 'actor'),
+    'docs/product/model/journeys/jrn-validate.md': artifact(
+      'JRN-VALIDATE',
+      'journey',
+      'primary-actor: ACT-VALIDATOR\n',
+    ),
+    'docs/product/model/use-cases/uc-validate.md': artifact('UC-VALIDATE', 'use-case'),
+    'docs/product/model/requirements/functional/fr-validate.md': artifact(
+      'FR-VALIDATE',
+      'functional-requirement',
+    ),
+  });
+  return cases;
+}
+
 describe('pdac-conformance run', () => {
   it('passes a case whose emitted diagnostics satisfy its expectations', async () => {
     const { code, report: json } = await report(
@@ -166,6 +248,57 @@ describe('pdac-conformance run', () => {
     expect(code).toBe(exitCodes.conformanceFailures);
     expect(json.cases[0]).toMatchObject({ status: 'fail' });
     expect(json.cases[0]?.exercises[0]?.reason).toMatch(/exercised nothing/);
+  });
+
+  it('fails all six frozen-suite zero-diagnostic case families for a no-op implementation', async () => {
+    const cases = await sixZeroDiagnosticCases();
+    const { code, report: json } = await report('run', '--cases', cases, '--command', command());
+    expect(code).toBe(exitCodes.conformanceFailures);
+    expect(json.summary).toMatchObject({ total: 6, passed: 0, failed: 6, errored: 0 });
+    expect(json.cases.map((entry) => entry.name)).toEqual([
+      'artifact-kinds-valid',
+      'citation-current',
+      'configuration-custom-root',
+      'dedicated-topology',
+      'digest-bytes-not-text',
+      'greenfield-first-increment',
+    ]);
+    expect(json.cases.every((entry) => entry.status === 'fail')).toBe(true);
+  });
+
+  it('passes all six frozen-suite zero-diagnostic case families for an implementation that observes each mutation', async () => {
+    const cases = await sixZeroDiagnosticCases();
+    const { code, report: json } = await report(
+      'run',
+      '--cases',
+      cases,
+      '--command',
+      command('soundness'),
+    );
+    expect(code).toBe(exitCodes.success);
+    expect(json.summary).toMatchObject({ total: 6, passed: 6, failed: 0, errored: 0 });
+    expect(
+      json.cases
+        .find((entry) => entry.name === 'artifact-kinds-valid')
+        ?.exercises.filter((exercise) => exercise.kind === 'artifact-type'),
+    ).toHaveLength(9);
+    expect(
+      json.cases.find((entry) => entry.name === 'configuration-custom-root')?.exercises,
+    ).toMatchObject([{ kind: 'artifact-type', target: 'ACT-CONFIG-READER', status: 'pass' }]);
+    expect(
+      json.cases.find((entry) => entry.name === 'dedicated-topology')?.exercises,
+    ).toContainEqual(expect.objectContaining({ kind: 'graph-reference', status: 'pass' }));
+  });
+
+  it('refuses a zero-diagnostic fixture with no deterministic positive-evidence probe', async () => {
+    const cases = await mkdtemp(join(tmpdir(), 'pdac-conformance-unprotected-'));
+    await writeZeroDiagnosticCase(cases, 'unprotected', {});
+    const { code, report: json } = await report('run', '--cases', cases, '--command', command());
+    expect(code).toBe(exitCodes.conformanceFailures);
+    expect(json.cases[0]?.status).toBe('error');
+    expect(json.cases[0]?.exercises).toMatchObject([
+      { kind: 'unprotected', status: 'error', reason: expect.stringMatching(/positive evidence/) },
+    ]);
   });
 
   it('fails a case whose expected diagnostic never arrives', async () => {

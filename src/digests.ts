@@ -147,6 +147,42 @@ export interface CitationPin {
   anchor?: string;
 }
 
+/** A fixture Product Artifact that can be exercised without knowing its directory convention. */
+export interface FixtureArtifact {
+  /** Absolute file path inside the fixture repository. */
+  path: string;
+  id: string;
+  type: string;
+  primaryActor?: string;
+}
+
+/** The frontmatter value for one scalar field. This is enough for fixture discovery, not YAML parsing. */
+function frontmatterValue(text: string, field: string): string | undefined {
+  if (!text.startsWith('---')) return undefined;
+  const end = text.indexOf('\n---', 3);
+  if (end === -1) return undefined;
+  const found = new RegExp(`^${field}:\\s*(\\S+)\\s*$`, 'm').exec(text.slice(3, end));
+  return found?.[1];
+}
+
+/** Every typed Product Artifact in a fixture, ordered by its repository-relative path. */
+export async function collectFixtureArtifacts(repoDir: string): Promise<FixtureArtifact[]> {
+  const artifacts: FixtureArtifact[] = [];
+  for (const path of await files(repoDir)) {
+    if (!path.endsWith('.md')) continue;
+    const text = await readFile(path, 'utf8');
+    const id = frontmatterValue(text, 'id');
+    const type = frontmatterValue(text, 'type');
+    // Product Changes carry their own `type: product-change` metadata but are not Product
+    // Artifacts. Their validation belongs to the change command, so they cannot prove artifact
+    // discovery in a zero-diagnostic fixture.
+    if (id && type && type !== 'product-change') {
+      artifacts.push({ path, id, type, primaryActor: frontmatterValue(text, 'primary-actor') });
+    }
+  }
+  return artifacts;
+}
+
 /** Every digest a fixture pins, from its ledgers and from its marker blocks. */
 export async function collectCitationPins(repoDir: string): Promise<CitationPin[]> {
   const pins: CitationPin[] = [];
