@@ -1,6 +1,10 @@
 import { compareDiagnostics, findOrderingViolation, toComparable } from './compare.js';
 import { discoverCases, type TestCase, type DiscoverOptions } from './cases.js';
+import { baselineIndex, collectCitationPins } from './digests.js';
 import { parseDiagnostics } from './envelope.js';
+import { appendFile } from 'node:fs/promises';
+import { relative, sep } from 'node:path';
+import { reportProvenance } from './provenance.js';
 import {
   runCommand,
   splitCommand,
@@ -12,8 +16,10 @@ import {
   comparedFields,
   reportSchema,
   type CaseResult,
+  type ClaimOptions,
   type CommandRun,
   type Diagnostic,
+  type ExerciseResult,
   type ExpectedExitCode,
   type Report,
 } from './types.js';
@@ -26,6 +32,141 @@ export interface RunOptions extends DiscoverOptions {
   commands: string[];
   keep?: boolean;
   timeoutMs?: number;
+  claims?: ClaimOptions;
+}
+
+const exerciseCodes = ['PRODUCT061', 'PRODUCT062'] as const;
+
+/** A changed target must make its citation stale or tampered, never silently remain current. */
+function observedExerciseDiagnostic(diagnostics: Diagnostic[], target: string): boolean {
+  return diagnostics.some(
+    (diagnostic) =>
+      exerciseCodes.includes(diagnostic.code as (typeof exerciseCodes)[number]) &&
+      (diagnostic.target === target || diagnostic.artifact === target),
+  );
+}
+
+async function exercisePin(
+  testCase: TestCase,
+  commands: string[][],
+  timeoutMs: number,
+  pin: Awaited<ReturnType<typeof collectCitationPins>>[number],
+): Promise<ExerciseResult> {
+  const source = relative(testCase.dir, pin.path).split(sep).join('/');
+  if (!pin.id) {
+    return {
+      target: '(none recorded)',
+      source,
+      expectedCodes: [...exerciseCodes],
+      status: 'error',
+      reason: 'cannot exercise a citation pin without a target id',
+      runs: [],
+    };
+  }
+
+  return await withFixtureCopy(
+    testCase.repoDir,
+    `${testCase.name}-exercise`,
+    false,
+    async (work) => {
+      const target = (await baselineIndex(work)).get(pin.id!);
+      if (!target) {
+        return {
+          target: pin.id!,
+          source,
+          expectedCodes: [...exerciseCodes],
+          status: 'error',
+          reason: 'cannot exercise a citation pin whose target does not resolve',
+          runs: [],
+        };
+      }
+
+      // A Markdown comment changes the exact artifact bytes without changing its PDaC meaning. It is
+      // intentionally fixed so the mutation is reproducible and belongs to the runner, not a case.
+      await appendFile(target, '\n<!-- pdac-conformance exercise -->\n');
+      const runs: CommandRun[] = [];
+      const diagnostics: Diagnostic[] = [];
+      for (const argv of commands) {
+        let spawned;
+        try {
+          spawned = await runCommand(argv, work, timeoutMs);
+        } catch (error) {
+          return {
+            target: pin.id!,
+            source,
+            expectedCodes: [...exerciseCodes],
+            status: 'error',
+            reason: (error as Error).message,
+            runs,
+          };
+        }
+        const run: CommandRun = { argv, ...spawned };
+        runs.push(run);
+        const rejected = invocationFailure(run, undefined);
+        if (rejected) {
+          return {
+            target: pin.id!,
+            source,
+            expectedCodes: [...exerciseCodes],
+            status: 'error',
+            reason: rejected,
+            runs,
+          };
+        }
+        try {
+          diagnostics.push(...parseDiagnostics(run.stdout));
+        } catch (error) {
+          return {
+            target: pin.id!,
+            source,
+            expectedCodes: [...exerciseCodes],
+            status: 'error',
+            reason: `'${argv.join(' ')}': ${(error as Error).message}`,
+            runs,
+          };
+        }
+      }
+      return {
+        target: pin.id!,
+        source,
+        expectedCodes: [...exerciseCodes],
+        status: observedExerciseDiagnostic(diagnostics, pin.id!) ? 'pass' : 'fail',
+        ...(observedExerciseDiagnostic(diagnostics, pin.id!)
+          ? {}
+          : { reason: 'exercised nothing: mutation produced no stale or tampered diagnostic' }),
+        runs,
+      };
+    },
+  );
+}
+
+/**
+ * A zero-diagnostic case with citation pins can otherwise pass when an implementation discovers
+ * no citations at all. Re-run each pin against one controlled target mutation as observable
+ * evidence, without imposing an implementation-specific report envelope.
+ */
+async function exerciseZeroDiagnosticCase(
+  testCase: TestCase,
+  commands: string[][],
+  timeoutMs: number,
+): Promise<ExerciseResult[]> {
+  if (testCase.expected.length > 0) return [];
+  let pins;
+  try {
+    pins = await collectCitationPins(testCase.repoDir);
+  } catch (error) {
+    return [
+      {
+        target: '(unreadable)',
+        source: '(unreadable)',
+        expectedCodes: [...exerciseCodes],
+        status: 'error',
+        reason: (error as Error).message,
+        runs: [],
+      },
+    ];
+  }
+  return await Promise.all(pins.map((pin) => exercisePin(testCase, commands, timeoutMs, pin)));
 }
 
 /** Identify a diagnostic by its compared fields, so the union across commands does not double up. */
@@ -66,6 +207,7 @@ async function runCase(
     missing: [],
     unexpected: [],
     runs: [],
+    exercises: [],
   };
 
   await withFixtureCopy(testCase.repoDir, testCase.name, options.keep ?? false, async (work) => {
@@ -144,6 +286,15 @@ async function runCase(
     ) {
       result.status = 'fail';
     }
+
+    result.exercises = await exerciseZeroDiagnosticCase(
+      testCase,
+      commands,
+      options.timeoutMs ?? defaultTimeoutMs,
+    );
+    if (result.exercises.some((exercise) => exercise.status === 'error')) result.status = 'error';
+    else if (result.exercises.some((exercise) => exercise.status === 'fail'))
+      result.status = 'fail';
   });
 
   return result;
@@ -170,6 +321,7 @@ export async function runCases(options: RunOptions): Promise<Report> {
       missing: [],
       unexpected: [],
       runs: [],
+      exercises: [],
     });
   }
   cases.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -179,7 +331,8 @@ export async function runCases(options: RunOptions): Promise<Report> {
 
   return {
     schema: reportSchema,
-    spec: discovered.source,
+    kind: 'conformance',
+    provenance: reportProvenance(discovered.source, options.claims),
     commands: options.commands,
     cases,
     summary: {

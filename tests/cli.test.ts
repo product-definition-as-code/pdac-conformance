@@ -1,8 +1,10 @@
-import { access } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { exitCodes, runCli } from '../src/cli.js';
+import { digestText } from '../src/digests.js';
 import type { DigestReport, Report } from '../src/types.js';
 
 const casesDir = fileURLToPath(new URL('./fixtures/cases', import.meta.url));
@@ -36,7 +38,54 @@ async function report(...argv: string[]): Promise<{ code: number; report: Report
   return { code: result.code, report: JSON.parse(result.out) as Report };
 }
 
-describe('pdac-lint run', () => {
+const exerciseArtifact = `---
+id: FR-EXERCISE-001
+type: functional-requirement
+---
+
+## Requirement
+
+The product MUST exercise this citation.
+`;
+
+async function zeroDiagnosticCase(): Promise<{
+  cases: string;
+  detectMutation: string;
+  ignoreMutation: string;
+}> {
+  const root = await mkdtemp(join(tmpdir(), 'pdac-conformance-exercise-'));
+  const caseDir = join(root, 'pinned-zero-diagnostic');
+  const model = join(caseDir, 'repo', 'docs', 'product', 'model', 'requirements', 'functional');
+  const specs = join(caseDir, 'repo', 'specs');
+  await mkdir(model, { recursive: true });
+  await mkdir(specs, { recursive: true });
+  await writeFile(join(model, 'fr-exercise-001.md'), exerciseArtifact);
+  await writeFile(
+    join(specs, 'feature.citations.yml'),
+    `citations:\n  - id: FR-EXERCISE-001\n    digest: ${digestText(exerciseArtifact)}\n`,
+  );
+  await writeFile(join(caseDir, 'expected.json'), '{ "diagnostics": [] }\n');
+
+  const script = join(root, 'implementation.mjs');
+  await writeFile(
+    script,
+    `import { readFile } from 'node:fs/promises';
+const target = await readFile('docs/product/model/requirements/functional/fr-exercise-001.md', 'utf8');
+const diagnostics = process.argv.includes('--detect') && target.includes('pdac-conformance exercise')
+  ? [{ code: 'PRODUCT061', target: 'FR-EXERCISE-001' }]
+  : [];
+process.stdout.write(JSON.stringify({ diagnostics }) + '\\n');
+process.exit(diagnostics.length ? 1 : 0);
+`,
+  );
+  return {
+    cases: root,
+    detectMutation: `"${process.execPath}" "${script}" --detect`,
+    ignoreMutation: `"${process.execPath}" "${script}"`,
+  };
+}
+
+describe('pdac-conformance run', () => {
   it('passes a case whose emitted diagnostics satisfy its expectations', async () => {
     const { code, report: json } = await report(
       'run',
@@ -50,6 +99,73 @@ describe('pdac-lint run', () => {
     expect(code).toBe(exitCodes.success);
     expect(json.summary).toMatchObject({ total: 1, passed: 1, failed: 0, errored: 0 });
     expect(json.cases[0]?.runs[0]?.argv.slice(-2)).toEqual(['--format', 'json']);
+  });
+
+  it('records stable claimed and observed provenance without treating claims as observations', async () => {
+    const { report: json } = await report(
+      'run',
+      '--cases',
+      casesDir,
+      '--case',
+      'pass-case',
+      '--command',
+      command(),
+      '--implementation-name',
+      'ProductShape',
+      '--implementation-version',
+      '0.14.0',
+      '--implementation-artifact',
+      'sha256:example',
+      '--spec-version',
+      '0.2.0',
+      '--serialization-version',
+      'v1alpha1',
+    );
+    expect(json.schema).toBe('pdac-conformance/report/v1');
+    expect(json.kind).toBe('conformance');
+    expect(json.provenance).toMatchObject({
+      observed: {
+        runner: { name: 'pdac-conformance', version: '1.0.0' },
+        spec: { cases: casesDir, revision: null, branch: null, dirty: null },
+      },
+      claimed: {
+        implementation: {
+          name: 'ProductShape',
+          version: '0.14.0',
+          artifactIdentity: 'sha256:example',
+        },
+        spec: { version: '0.2.0', serializationVersion: 'v1alpha1' },
+      },
+    });
+  });
+
+  it('requires a pinned zero-diagnostic case to observe a controlled target mutation', async () => {
+    const fixture = await zeroDiagnosticCase();
+    const { code, report: json } = await report(
+      'run',
+      '--cases',
+      fixture.cases,
+      '--command',
+      fixture.detectMutation,
+    );
+    expect(code).toBe(exitCodes.success);
+    expect(json.cases[0]?.exercises).toMatchObject([
+      { target: 'FR-EXERCISE-001', status: 'pass', expectedCodes: ['PRODUCT061', 'PRODUCT062'] },
+    ]);
+  });
+
+  it('fails a pinned zero-diagnostic case when a command ignores its controlled target mutation', async () => {
+    const fixture = await zeroDiagnosticCase();
+    const { code, report: json } = await report(
+      'run',
+      '--cases',
+      fixture.cases,
+      '--command',
+      fixture.ignoreMutation,
+    );
+    expect(code).toBe(exitCodes.conformanceFailures);
+    expect(json.cases[0]).toMatchObject({ status: 'fail' });
+    expect(json.cases[0]?.exercises[0]?.reason).toMatch(/exercised nothing/);
   });
 
   it('fails a case whose expected diagnostic never arrives', async () => {
@@ -272,7 +388,7 @@ describe('pdac-lint run', () => {
   });
 });
 
-describe('pdac-lint digests', () => {
+describe('pdac-conformance digests', () => {
   it('verifies conformance tests whose pins still hold', async () => {
     const result = await invoke('digests', '--cases', digestCasesDir, '--case', 'current-pin');
     expect(result.code).toBe(exitCodes.success);
@@ -289,7 +405,8 @@ describe('pdac-lint digests', () => {
   it('emits the digest report schema under --format json', async () => {
     const result = await invoke('digests', '--cases', digestCasesDir, '--format', 'json');
     const json = JSON.parse(result.out) as DigestReport;
-    expect(json.schema).toBe('pdac-lint/digest-report/v0');
+    expect(json.schema).toBe('pdac-conformance/report/v1');
+    expect(json.kind).toBe('digests');
     expect(json.summary).toMatchObject({ total: 2, verified: 1, failed: 1, cases: 2 });
     expect(json.pins.map((pin) => pin.status)).toEqual(['match', 'mismatch']);
   });
@@ -316,7 +433,7 @@ describe('pdac-lint digests', () => {
   });
 });
 
-describe('pdac-lint invocation', () => {
+describe('pdac-conformance invocation', () => {
   it('requires conformance tests', async () => {
     const result = await invoke('run', '--command', command());
     expect(result.code).toBe(exitCodes.invalidInvocation);
@@ -359,7 +476,7 @@ describe('pdac-lint invocation', () => {
   it('prints help and a version', async () => {
     const help = await invoke('--help');
     expect(help.code).toBe(exitCodes.success);
-    expect(help.out).toContain('pdac-lint run [options]');
+    expect(help.out).toContain('pdac-conformance run [options]');
 
     const version = await invoke('--version');
     expect(version.code).toBe(exitCodes.success);
