@@ -300,8 +300,9 @@ describe('a case set with nothing to verify', () => {
 describe('report shape', () => {
   it('carries the schema, the spec source and a stable pin order', async () => {
     const report = await verifyDigests({ cases: await casesWith({ pinned: currentDigest }) });
-    expect(report.schema).toBe('pdac-lint/digest-report/v0');
-    expect(report.spec.cases).toContain('pdac-lint-digests-');
+    expect(report.schema).toBe('pdac-conformance/report/v1');
+    expect(report.kind).toBe('digests');
+    expect(report.provenance.observed.spec.cases).toContain('pdac-lint-digests-');
     expect(report.summary.cases).toBe(1);
   });
 

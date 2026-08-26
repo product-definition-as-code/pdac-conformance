@@ -1,6 +1,10 @@
 import { compareDiagnostics, findOrderingViolation, toComparable } from './compare.js';
 import { discoverCases, type TestCase, type DiscoverOptions } from './cases.js';
+import { baselineIndex, collectCitationPins, collectFixtureArtifacts } from './digests.js';
 import { parseDiagnostics } from './envelope.js';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import { join, relative, sep } from 'node:path';
+import { reportProvenance } from './provenance.js';
 import {
   runCommand,
   splitCommand,
@@ -12,8 +16,10 @@ import {
   comparedFields,
   reportSchema,
   type CaseResult,
+  type ClaimOptions,
   type CommandRun,
   type Diagnostic,
+  type ExerciseResult,
   type ExpectedExitCode,
   type Report,
 } from './types.js';
@@ -26,6 +32,262 @@ export interface RunOptions extends DiscoverOptions {
   commands: string[];
   keep?: boolean;
   timeoutMs?: number;
+  claims?: ClaimOptions;
+}
+
+const exerciseCodes = ['PRODUCT061', 'PRODUCT062'] as const;
+const invalidType = 'pdac-conformance-invalid-type';
+const missingActor = 'ACT-PDAC-CONFORMANCE-MISSING';
+
+interface ExerciseDefinition {
+  kind: ExerciseResult['kind'];
+  target: string;
+  source: string;
+  expectedCodes: string[];
+  observed: (diagnostics: Diagnostic[]) => boolean;
+  failure: string;
+  mutate: (work: string) => Promise<void>;
+}
+
+/** A changed target must make its citation stale or tampered, never silently remain current. */
+function observedExerciseDiagnostic(
+  diagnostics: Diagnostic[],
+  codes: readonly string[],
+  target?: string,
+): boolean {
+  return diagnostics.some(
+    (diagnostic) =>
+      diagnostic.code !== undefined &&
+      codes.includes(diagnostic.code) &&
+      (target === undefined || diagnostic.target === target || diagnostic.artifact === target),
+  );
+}
+
+async function runExercise(
+  testCase: TestCase,
+  commands: string[][],
+  timeoutMs: number,
+  definition: ExerciseDefinition,
+): Promise<ExerciseResult> {
+  const failed = (reason: string, runs: CommandRun[] = []): ExerciseResult => ({
+    kind: definition.kind,
+    target: definition.target,
+    source: definition.source,
+    expectedCodes: definition.expectedCodes,
+    status: 'error',
+    reason,
+    runs,
+  });
+
+  return await withFixtureCopy(
+    testCase.repoDir,
+    `${testCase.name}-exercise`,
+    false,
+    async (work) => {
+      try {
+        await definition.mutate(work);
+      } catch (error) {
+        return failed((error as Error).message);
+      }
+
+      const runs: CommandRun[] = [];
+      const diagnostics: Diagnostic[] = [];
+      for (const argv of commands) {
+        let spawned;
+        try {
+          spawned = await runCommand(argv, work, timeoutMs);
+        } catch (error) {
+          return failed((error as Error).message, runs);
+        }
+        const run: CommandRun = { argv, ...spawned };
+        runs.push(run);
+        const rejected = invocationFailure(run, undefined);
+        if (rejected) return failed(rejected, runs);
+        try {
+          diagnostics.push(...parseDiagnostics(run.stdout));
+        } catch (error) {
+          return failed(`'${argv.join(' ')}': ${(error as Error).message}`, runs);
+        }
+      }
+
+      return {
+        kind: definition.kind,
+        target: definition.target,
+        source: definition.source,
+        expectedCodes: definition.expectedCodes,
+        status: definition.observed(diagnostics) ? 'pass' : 'fail',
+        ...(definition.observed(diagnostics) ? {} : { reason: definition.failure }),
+        runs,
+      };
+    },
+  );
+}
+
+async function exercisePin(
+  testCase: TestCase,
+  commands: string[][],
+  timeoutMs: number,
+  pin: Awaited<ReturnType<typeof collectCitationPins>>[number],
+): Promise<ExerciseResult> {
+  const source = relative(testCase.dir, pin.path).split(sep).join('/');
+  if (!pin.id) {
+    return {
+      kind: 'citation-pin',
+      target: '(none recorded)',
+      source,
+      expectedCodes: [...exerciseCodes],
+      status: 'error',
+      reason: 'cannot exercise a citation pin without a target id',
+      runs: [],
+    };
+  }
+
+  return await runExercise(testCase, commands, timeoutMs, {
+    kind: 'citation-pin',
+    target: pin.id,
+    source,
+    expectedCodes: [...exerciseCodes],
+    observed: (diagnostics) => observedExerciseDiagnostic(diagnostics, exerciseCodes, pin.id),
+    failure: 'exercised nothing: mutation produced no stale or tampered diagnostic',
+    mutate: async (work) => {
+      const target = (await baselineIndex(work)).get(pin.id!);
+      if (!target) {
+        throw new Error('cannot exercise a citation pin whose target does not resolve');
+      }
+
+      // A Markdown comment changes the exact artifact bytes without changing its PDaC meaning. It is
+      // intentionally fixed so the mutation is reproducible and belongs to the runner, not a case.
+      await appendFile(target, '\n<!-- pdac-conformance exercise -->\n');
+    },
+  });
+}
+
+async function exerciseArtifactType(
+  testCase: TestCase,
+  commands: string[][],
+  timeoutMs: number,
+  artifact: Awaited<ReturnType<typeof collectFixtureArtifacts>>[number],
+): Promise<ExerciseResult> {
+  const source = relative(testCase.dir, artifact.path).split(sep).join('/');
+  const pathInRepo = relative(testCase.repoDir, artifact.path);
+  return await runExercise(testCase, commands, timeoutMs, {
+    kind: 'artifact-type',
+    target: artifact.id,
+    source,
+    expectedCodes: ['PRODUCT003'],
+    observed: (diagnostics) => observedExerciseDiagnostic(diagnostics, ['PRODUCT003']),
+    failure: 'exercised nothing: invalid artifact type produced no PRODUCT003 diagnostic',
+    mutate: async (work) => {
+      const path = join(work, pathInRepo);
+      const original = await readFile(path, 'utf8');
+      const changed = original.replace(/^type:\s*\S+\s*$/m, `type: ${invalidType}`);
+      if (changed === original)
+        throw new Error('cannot exercise an artifact without a scalar type');
+      await writeFile(path, changed);
+    },
+  });
+}
+
+async function exerciseGraphReference(
+  testCase: TestCase,
+  commands: string[][],
+  timeoutMs: number,
+  artifact: Awaited<ReturnType<typeof collectFixtureArtifacts>>[number],
+): Promise<ExerciseResult> {
+  const source = relative(testCase.dir, artifact.path).split(sep).join('/');
+  const pathInRepo = relative(testCase.repoDir, artifact.path);
+  return await runExercise(testCase, commands, timeoutMs, {
+    kind: 'graph-reference',
+    target: missingActor,
+    source,
+    expectedCodes: ['PRODUCT006'],
+    observed: (diagnostics) =>
+      observedExerciseDiagnostic(diagnostics, ['PRODUCT006'], missingActor),
+    failure: 'exercised nothing: broken graph reference produced no PRODUCT006 diagnostic',
+    mutate: async (work) => {
+      const path = join(work, pathInRepo);
+      const original = await readFile(path, 'utf8');
+      const changed = original.replace(
+        /^primary-actor:\s*\S+\s*$/m,
+        `primary-actor: ${missingActor}`,
+      );
+      if (changed === original)
+        throw new Error('cannot exercise a fixture without a primary-actor relationship');
+      await writeFile(path, changed);
+    },
+  });
+}
+
+/**
+ * A zero-diagnostic case with citation pins can otherwise pass when an implementation discovers
+ * no citations at all. Re-run each pin against one controlled target mutation as observable
+ * evidence, without imposing an implementation-specific report envelope.
+ */
+async function exerciseZeroDiagnosticCase(
+  testCase: TestCase,
+  commands: string[][],
+  timeoutMs: number,
+): Promise<ExerciseResult[]> {
+  if (testCase.expected.length > 0) return [];
+  let pins;
+  try {
+    pins = await collectCitationPins(testCase.repoDir);
+  } catch (error) {
+    return [
+      {
+        kind: 'citation-pin',
+        target: '(unreadable)',
+        source: '(unreadable)',
+        expectedCodes: [...exerciseCodes],
+        status: 'error',
+        reason: (error as Error).message,
+        runs: [],
+      },
+    ];
+  }
+  if (pins.length > 0) {
+    return await Promise.all(pins.map((pin) => exercisePin(testCase, commands, timeoutMs, pin)));
+  }
+
+  let artifacts;
+  try {
+    artifacts = await collectFixtureArtifacts(testCase.repoDir);
+  } catch (error) {
+    return [
+      {
+        kind: 'unprotected',
+        target: '(unreadable)',
+        source: '(unreadable)',
+        expectedCodes: [],
+        status: 'error',
+        reason: (error as Error).message,
+        runs: [],
+      },
+    ];
+  }
+  if (artifacts.length === 0) {
+    return [
+      {
+        kind: 'unprotected',
+        target: '(none)',
+        source: '(none)',
+        expectedCodes: [],
+        status: 'error',
+        reason:
+          'cannot establish positive evidence for a zero-diagnostic fixture without a pin or Product Artifact',
+        runs: [],
+      },
+    ];
+  }
+  const artifactExercises = await Promise.all(
+    artifacts.map((artifact) => exerciseArtifactType(testCase, commands, timeoutMs, artifact)),
+  );
+  const graphSource = artifacts.find((artifact) => artifact.primaryActor !== undefined);
+  if (!graphSource) return artifactExercises;
+  return [
+    ...artifactExercises,
+    await exerciseGraphReference(testCase, commands, timeoutMs, graphSource),
+  ];
 }
 
 /** Identify a diagnostic by its compared fields, so the union across commands does not double up. */
@@ -66,6 +328,7 @@ async function runCase(
     missing: [],
     unexpected: [],
     runs: [],
+    exercises: [],
   };
 
   await withFixtureCopy(testCase.repoDir, testCase.name, options.keep ?? false, async (work) => {
@@ -144,6 +407,17 @@ async function runCase(
     ) {
       result.status = 'fail';
     }
+
+    if (result.status === 'pass') {
+      result.exercises = await exerciseZeroDiagnosticCase(
+        testCase,
+        commands,
+        options.timeoutMs ?? defaultTimeoutMs,
+      );
+      if (result.exercises.some((exercise) => exercise.status === 'error')) result.status = 'error';
+      else if (result.exercises.some((exercise) => exercise.status === 'fail'))
+        result.status = 'fail';
+    }
   });
 
   return result;
@@ -170,6 +444,7 @@ export async function runCases(options: RunOptions): Promise<Report> {
       missing: [],
       unexpected: [],
       runs: [],
+      exercises: [],
     });
   }
   cases.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -179,7 +454,8 @@ export async function runCases(options: RunOptions): Promise<Report> {
 
   return {
     schema: reportSchema,
-    spec: discovered.source,
+    kind: 'conformance',
+    provenance: reportProvenance(discovered.source, options.claims),
     commands: options.commands,
     cases,
     summary: {

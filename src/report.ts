@@ -57,6 +57,12 @@ function caseDetail(result: CaseResult, lines: string[]): void {
       `    out of order at index ${result.ordering.index}: ${formatDiagnostic(result.ordering.before)} precedes ${formatDiagnostic(result.ordering.after)}`,
     );
   }
+  for (const exercise of result.exercises) {
+    if (exercise.status === 'pass') continue;
+    lines.push(
+      `    exercise ${exercise.status}: ${exercise.source} -> ${exercise.target}${exercise.reason ? `: ${exercise.reason}` : ''}`,
+    );
+  }
   if (result.status === 'error') {
     // More than one command may have run before the case errored; name the one each stream
     // belongs to, or the reader is left matching output to commands by guesswork.
@@ -72,7 +78,10 @@ function caseDetail(result: CaseResult, lines: string[]): void {
 /** The human report: one line per case, details under the ones that did not pass. */
 export function renderText(report: Report): string {
   const lines: string[] = [];
-  lines.push(`Conformance: ${formatSource(report.spec)}`);
+  lines.push(`Conformance: ${formatSource(report.provenance.observed.spec)}`);
+  lines.push(
+    `Runner: ${report.provenance.observed.runner.name} ${report.provenance.observed.runner.version}`,
+  );
   for (const command of report.commands) lines.push(`Implementation: ${command}`);
   lines.push('');
 
@@ -108,7 +117,10 @@ const quiet = new Set<PinStatus>(['match', 'differs-as-expected']);
  */
 export function renderDigestText(report: DigestReport): string {
   const lines: string[] = [];
-  lines.push(`Conformance: ${formatSource(report.spec)}`);
+  lines.push(`Conformance: ${formatSource(report.provenance.observed.spec)}`);
+  lines.push(
+    `Runner: ${report.provenance.observed.runner.name} ${report.provenance.observed.runner.version}`,
+  );
   lines.push('');
 
   for (const pin of report.pins) {

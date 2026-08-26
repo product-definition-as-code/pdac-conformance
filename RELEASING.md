@@ -1,46 +1,24 @@
 # Releasing
 
-`pdac-lint` is a single unscoped package published to npm as [`pdac-lint`](https://www.npmjs.com/package/pdac-lint). It needs no npm organization: an organization is only required for a scoped name.
+The canonical package is [`pdac-conformance`](https://www.npmjs.com/package/pdac-conformance). Its canonical repository is `product-definition-as-code/pdac-conformance`. Repository rename, npm publication and npm deprecation are human-gated external actions and are not performed by this repository checkout.
 
-Publishing runs in [`.github/workflows/release.yml`](.github/workflows/release.yml) and nowhere else. `package.json` declares `publishConfig.provenance`, and provenance needs the OIDC token only CI has, so `npm publish` from a developer machine fails by design.
+## Transition release
 
-## Required repository configuration
+Release exactly one `pdac-lint` transition package alongside the first `pdac-conformance` release. It depends on the matching canonical version, its `pdac-lint` command writes `pdac-lint is deprecated; use pdac-conformance.`, then forwards all arguments to the new binary. No further feature or compatibility releases are planned for `pdac-lint`.
 
-**Secret**
+The required publication sequence is:
 
-- `NPM_TOKEN` - a granular npm access token with write access, exposed to the workflow as `NODE_AUTH_TOKEN`. Used only as a fallback while a trusted publisher is being configured, and ignored once OIDC is in place. npm cannot scope a token to a package that does not exist, so the bootstrap token is necessarily broader than the steady-state one; give it a short expiry and replace it after the first publish.
+1. Rename the GitHub repository to `product-definition-as-code/pdac-conformance`, then verify the redirect from the former repository URL.
+2. Configure the protected `npm-publish` environment and a short-lived `NPM_TOKEN` that can bootstrap both packages. npm cannot configure a Trusted Publisher for a package that does not exist.
+3. Run the release workflow in dry-run mode. It must pass type checking, linting, formatting, unit tests, command checks and both package-content checks.
+4. Publish `pdac-conformance@1.0.0` from CI with provenance and verify the registry package and tarball.
+5. Publish the matching `pdac-lint@1.0.0` transition package from the same CI release, then install it in a clean directory and verify that `pdac-lint --help` warns and forwards.
+6. Configure the npm Trusted Publisher for both packages against the renamed repository's `release.yml` workflow and protected `npm-publish` environment. Downscope or remove the bootstrap token.
+7. Deprecate all earlier `pdac-lint` versions with `npm deprecate pdac-lint@'<1.0.0' "renamed to pdac-conformance; install pdac-conformance"`.
+8. After the stated transition window, deprecate `pdac-lint@1.0.0` with `npm deprecate pdac-lint@1.0.0 "transition complete; install pdac-conformance"`. Do not publish a replacement compatibility version.
 
-**Environment**
+## Release controls
 
-- `npm-publish` - a protected environment with required reviewers, created under _Settings then Environments_. The release job runs inside it, so reaching npm takes a human approval.
+Publishing runs only in [`.github/workflows/release.yml`](.github/workflows/release.yml). The protected `npm-publish` environment requires human approval. npm versions are immutable, so a defect is corrected by publishing forward rather than replacing a tarball.
 
-**npm configuration (npmjs.com)**
-
-- Add a Trusted Publisher to the package: GitHub Actions, repo `product-definition-as-code/pdac-lint`, workflow `release.yml`, environment `npm-publish`. npm has no pending-publisher concept, so this can only be done after the package exists.
-
-## First publish (bootstrap)
-
-1. Enable 2FA on the npm account.
-2. Create the granular token, add it as `NPM_TOKEN`, create the `npm-publish` environment.
-3. Run the workflow with **dry-run** checked. It builds, runs every check and lists what would ship, without publishing.
-4. Run it again with dry-run unchecked. The package now exists, published with provenance.
-5. Configure the Trusted Publisher on npmjs.com.
-6. Downscope the token to the package, or delete it: from here OIDC authenticates the publish.
-
-## Normal release
-
-1. Bump `version` in `package.json` in a pull request, with the changes it covers.
-2. Merge it.
-3. Run the Release workflow from the Actions tab and approve the `npm-publish` deployment.
-
-The workflow refuses to run if that version is already on the registry or if its tag already exists, because npm versions are immutable and a republish is not a fix. It verifies the publish against the registry afterwards rather than trusting the exit code, and pushes an annotated `vX.Y.Z` tag, verifying that too.
-
-## Rollback
-
-Publish forward. npm versions are immutable, so a bad release is corrected by deprecating it and shipping a fixed version:
-
-```bash
-npm deprecate pdac-lint@X.Y.Z "broken release, use X.Y.Z+1"
-```
-
-Unpublishing is available only within 72 hours and breaks anyone who already installed the version. Prefer deprecation.
+Before publication, check that both package names and target versions remain available. After publication, verify each package from a clean temporary installation and record its tarball digest and npm URL in the release handoff.

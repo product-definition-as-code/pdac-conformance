@@ -1,8 +1,5 @@
-/** The report schema this runner emits under `--format json`. */
-export const reportSchema = 'pdac-lint/conformance-report/v0';
-
-/** The report schema `pdac-lint digests` emits under `--format json`. */
-export const digestReportSchema = 'pdac-lint/digest-report/v0';
+/** The producer-owned schema for every JSON report this runner emits. */
+export const reportSchema = 'pdac-conformance/report/v1';
 
 /**
  * The fields a runner compares, from the conformance test rules (`conformance/README.md`, "Comparing
@@ -81,6 +78,22 @@ export interface CaseResult {
   runs: CommandRun[];
   /** The retained fixture working copy, when `--keep` was given. */
   workDir?: string;
+  /** Mutation exercises that make a pinned zero-diagnostic case evidence-bearing. */
+  exercises: ExerciseResult[];
+}
+
+export interface ExerciseResult {
+  /** The deterministic perturbation used to make the fixture's relevant surface observable. */
+  kind: 'citation-pin' | 'artifact-type' | 'graph-reference' | 'unprotected';
+  /** The cited Product Artifact deliberately changed in this isolated working copy. */
+  target: string;
+  /** Citation carrier path, relative to the case directory, with POSIX separators. */
+  source: string;
+  /** The diagnostic that proves the command observed the changed citation target. */
+  expectedCodes: string[];
+  status: 'pass' | 'fail' | 'error';
+  reason?: string;
+  runs: CommandRun[];
 }
 
 /** A case the runner did not execute, and why. Reported, never dropped. */
@@ -94,9 +107,51 @@ export interface SpecSource {
   cases: string;
   /** Absolute path to the spec checkout, when one was given. */
   root?: string;
-  revision?: string;
-  branch?: string;
-  dirty?: boolean;
+  /** Observed Git revision, or null when the source is not a Git checkout. */
+  revision: string | null;
+  /** Observed Git branch, or null for a detached or unversioned source. */
+  branch: string | null;
+  /** Observed Git dirty state, or null when it cannot be observed. */
+  dirty: boolean | null;
+}
+
+export interface RunnerIdentity {
+  name: 'pdac-conformance';
+  version: string;
+}
+
+export interface ClaimedImplementation {
+  name: string | null;
+  version: string | null;
+  artifactIdentity: string | null;
+}
+
+export interface ClaimedSpec {
+  version: string | null;
+  serializationVersion: string | null;
+}
+
+/**
+ * Observations are measured by the runner. Claims are caller-supplied labels and are never
+ * treated as conformance evidence by the runner.
+ */
+export interface ReportProvenance {
+  observed: {
+    runner: RunnerIdentity;
+    spec: SpecSource;
+  };
+  claimed: {
+    implementation: ClaimedImplementation;
+    spec: ClaimedSpec;
+  };
+}
+
+export interface ClaimOptions {
+  implementationName?: string;
+  implementationVersion?: string;
+  implementationArtifact?: string;
+  specVersion?: string;
+  serializationVersion?: string;
 }
 
 export interface ReportSummary {
@@ -109,7 +164,8 @@ export interface ReportSummary {
 
 export interface Report {
   schema: typeof reportSchema;
-  spec: SpecSource;
+  kind: 'conformance';
+  provenance: ReportProvenance;
   /** The implementation commands as configured, before `--format json` was appended. */
   commands: string[];
   cases: CaseResult[];
@@ -156,8 +212,9 @@ export interface DigestSummary {
 }
 
 export interface DigestReport {
-  schema: typeof digestReportSchema;
-  spec: SpecSource;
+  schema: typeof reportSchema;
+  kind: 'digests';
+  provenance: ReportProvenance;
   /** One entry per pinned digest, in case order then path order. */
   pins: PinResult[];
   skipped: SkippedCase[];

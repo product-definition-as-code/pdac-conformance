@@ -26,11 +26,11 @@ export function version(): string {
   return pkg.version;
 }
 
-export const usage = `pdac-lint - conformance runner for Product Definition as Code
+export const usage = `pdac-conformance - conformance runner for Product Definition as Code
 
 Usage:
-  pdac-lint run [options]       run the conformance tests against an implementation
-  pdac-lint digests [options]   verify the digests the conformance tests pin, no implementation needed
+  pdac-conformance run [options]       run the conformance tests against an implementation
+  pdac-conformance digests [options]   verify the digests the conformance tests pin, no implementation needed
 
 Options:
   --spec <path>       spec checkout holding conformance/cases (env: PDAC_SPEC)
@@ -41,6 +41,11 @@ Options:
   --format <fmt>      report format: text (default) or json
   --keep              keep the fixture working copies for inspection
   --timeout <ms>      per-command timeout (default ${defaultTimeoutMs})
+  --implementation-name <name>       claimed implementation name, recorded without verification
+  --implementation-version <version> claimed implementation version, recorded without verification
+  --implementation-artifact <value>  claimed implementation artifact identity, recorded without verification
+  --spec-version <version>            claimed specification version, recorded without verification
+  --serialization-version <version>   claimed serialization version, recorded without verification
   -h, --help          show this help
   -V, --version       show the version
 
@@ -51,8 +56,8 @@ Exit codes:
   3  unexpected internal failure
 
 Examples:
-  pdac-lint run --spec ./spec --command "prodshape change validate"
-  pdac-lint digests --spec ./spec`;
+  pdac-conformance run --spec ./spec --command "prodshape change validate"
+  pdac-conformance digests --spec ./spec`;
 
 export async function runCli(argv: string[], io: Io): Promise<number> {
   let parsed;
@@ -68,6 +73,11 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
         format: { type: 'string' },
         keep: { type: 'boolean' },
         timeout: { type: 'string' },
+        'implementation-name': { type: 'string' },
+        'implementation-version': { type: 'string' },
+        'implementation-artifact': { type: 'string' },
+        'spec-version': { type: 'string' },
+        'serialization-version': { type: 'string' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'V' },
       },
@@ -107,6 +117,13 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
   }
 
   const spec = values.spec ?? io.env.PDAC_SPEC;
+  const claims = {
+    implementationName: values['implementation-name'],
+    implementationVersion: values['implementation-version'],
+    implementationArtifact: values['implementation-artifact'],
+    specVersion: values['spec-version'],
+    serializationVersion: values['serialization-version'],
+  };
   if (!spec && !values.cases) {
     io.err(
       'error: no conformance tests given: pass --spec <spec checkout>, --cases <directory>, or PDAC_SPEC',
@@ -121,7 +138,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
   if (command === 'digests') {
     let digests;
     try {
-      digests = await verifyDigests({ spec, cases: values.cases, only: values.case });
+      digests = await verifyDigests({ spec, cases: values.cases, only: values.case, claims });
     } catch (error) {
       if (error instanceof CasesError) {
         io.err(`error: ${error.message}`);
@@ -134,7 +151,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
     // same kind of outcome as finding no conformance tests: the command could not do its job, which is exit
     // 2, not a clean bill of health.
     if (digests.summary.total === 0) {
-      io.err(`error: no pinned digests found in ${digests.spec.cases}`);
+      io.err(`error: no pinned digests found in ${digests.provenance.observed.spec.cases}`);
       return exitCodes.invalidInvocation;
     }
     return digests.summary.failed > 0 ? exitCodes.conformanceFailures : exitCodes.success;
@@ -165,6 +182,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
       commands,
       keep: values.keep,
       timeoutMs,
+      claims,
     });
   } catch (error) {
     if (error instanceof CasesError || error instanceof CommandError) {

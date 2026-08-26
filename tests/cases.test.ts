@@ -66,7 +66,13 @@ describe('describeSpec', () => {
     const outside = await mkdtemp(join(tmpdir(), 'pdac-lint-nogit-'));
     try {
       const source = await describeSpec(outside, casesDir);
-      expect(source).toEqual({ cases: casesDir, root: outside });
+      expect(source).toEqual({
+        cases: casesDir,
+        root: outside,
+        revision: null,
+        branch: null,
+        dirty: null,
+      });
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

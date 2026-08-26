@@ -1,0 +1,29 @@
+{
+  "name": "pdac-lint",
+  "version": "1.0.0",
+  "description": "Deprecated forwarding command for pdac-conformance.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "bin": {
+    "pdac-lint": "bin.js"
+  },
+  "files": [
+    "bin.js",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/product-definition-as-code/pdac-conformance.git",
+    "directory": "compat/pdac-lint"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "pdac-conformance": "workspace:^1.0.0"
+  }
+}

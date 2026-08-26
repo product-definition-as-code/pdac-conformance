@@ -58,15 +58,15 @@ async function git(cwd: string, args: string[]): Promise<string | undefined> {
  * simply reported without a revision, and no caller should mistake it for a pinned one.
  */
 export async function describeSpec(root: string, casesDir: string): Promise<SpecSource> {
-  const source: SpecSource = { cases: casesDir, root };
+  const source: SpecSource = { cases: casesDir, root, revision: null, branch: null, dirty: null };
   const inTree = await git(root, ['rev-parse', '--is-inside-work-tree']);
   if (inTree !== 'true') return source;
 
-  source.revision = await git(root, ['rev-parse', 'HEAD']);
+  source.revision = (await git(root, ['rev-parse', 'HEAD'])) ?? null;
   const branch = await git(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
   if (branch && branch !== 'HEAD') source.branch = branch;
   const status = await git(root, ['status', '--porcelain']);
-  source.dirty = status !== undefined && status.length > 0;
+  source.dirty = status === undefined ? null : status.length > 0;
   return source;
 }
 
@@ -187,7 +187,7 @@ export async function discoverCases(options: DiscoverOptions): Promise<CaseSet> 
 
   const source = options.spec
     ? await describeSpec(resolve(options.spec), casesDir)
-    : { cases: casesDir };
+    : { cases: casesDir, revision: null, branch: null, dirty: null };
 
   return { source, cases, skipped };
 }

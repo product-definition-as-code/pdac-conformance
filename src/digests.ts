@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { discoverCases, type TestCase, type DiscoverOptions } from './cases.js';
-import { digestReportSchema, type Diagnostic, type DigestReport, type PinResult } from './types.js';
+import { reportProvenance } from './provenance.js';
+import {
+  reportSchema,
+  type ClaimOptions,
+  type Diagnostic,
+  type DigestReport,
+  type PinResult,
+} from './types.js';
 
 /** A well-formed content digest, as `spec/validation.md` renders one. */
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
@@ -122,7 +129,7 @@ export function frontmatterId(text: string): string | undefined {
  * carrying the same ids as the baseline, and a citation resolves against the accepted definition,
  * so indexing both would let a proposal's content decide whether a baseline pin still holds.
  */
-async function baselineIndex(repoDir: string): Promise<Map<string, string>> {
+export async function baselineIndex(repoDir: string): Promise<Map<string, string>> {
   const index = new Map<string, string>();
   for (const path of await files(join(repoDir, modelRelative))) {
     if (!path.endsWith('.md')) continue;
@@ -132,7 +139,7 @@ async function baselineIndex(repoDir: string): Promise<Map<string, string>> {
   return index;
 }
 
-interface Pin {
+export interface CitationPin {
   path: string;
   kind: PinResult['kind'];
   id?: string;
@@ -140,9 +147,45 @@ interface Pin {
   anchor?: string;
 }
 
+/** A fixture Product Artifact that can be exercised without knowing its directory convention. */
+export interface FixtureArtifact {
+  /** Absolute file path inside the fixture repository. */
+  path: string;
+  id: string;
+  type: string;
+  primaryActor?: string;
+}
+
+/** The frontmatter value for one scalar field. This is enough for fixture discovery, not YAML parsing. */
+function frontmatterValue(text: string, field: string): string | undefined {
+  if (!text.startsWith('---')) return undefined;
+  const end = text.indexOf('\n---', 3);
+  if (end === -1) return undefined;
+  const found = new RegExp(`^${field}:\\s*(\\S+)\\s*$`, 'm').exec(text.slice(3, end));
+  return found?.[1];
+}
+
+/** Every typed Product Artifact in a fixture, ordered by its repository-relative path. */
+export async function collectFixtureArtifacts(repoDir: string): Promise<FixtureArtifact[]> {
+  const artifacts: FixtureArtifact[] = [];
+  for (const path of await files(repoDir)) {
+    if (!path.endsWith('.md')) continue;
+    const text = await readFile(path, 'utf8');
+    const id = frontmatterValue(text, 'id');
+    const type = frontmatterValue(text, 'type');
+    // Product Changes carry their own `type: product-change` metadata but are not Product
+    // Artifacts. Their validation belongs to the change command, so they cannot prove artifact
+    // discovery in a zero-diagnostic fixture.
+    if (id && type && type !== 'product-change') {
+      artifacts.push({ path, id, type, primaryActor: frontmatterValue(text, 'primary-actor') });
+    }
+  }
+  return artifacts;
+}
+
 /** Every digest a fixture pins, from its ledgers and from its marker blocks. */
-async function collectPins(repoDir: string): Promise<Pin[]> {
-  const pins: Pin[] = [];
+export async function collectCitationPins(repoDir: string): Promise<CitationPin[]> {
+  const pins: CitationPin[] = [];
   for (const path of await files(repoDir)) {
     if (path.endsWith('.citations.yml')) {
       const text = await readFile(path, 'utf8');
@@ -204,7 +247,11 @@ function expects(expected: Diagnostic[], id: string | undefined, codes: string[]
   );
 }
 
-async function judge(testCase: TestCase, pin: Pin, index: Map<string, string>): Promise<PinResult> {
+async function judge(
+  testCase: TestCase,
+  pin: CitationPin,
+  index: Map<string, string>,
+): Promise<PinResult> {
   const result: PinResult = {
     case: testCase.name,
     source: relative(testCase.dir, pin.path).split(sep).join('/'),
@@ -248,16 +295,18 @@ async function judge(testCase: TestCase, pin: Pin, index: Map<string, string>): 
  * asserts the difference instead of excusing it, so an edit that accidentally makes a tampered
  * fixture faithful is caught rather than quietly destroying the case.
  */
-export async function verifyDigests(options: DiscoverOptions): Promise<DigestReport> {
+export async function verifyDigests(
+  options: DiscoverOptions & { claims?: ClaimOptions },
+): Promise<DigestReport> {
   const discovered = await discoverCases(options);
   const pins: PinResult[] = [];
   const skipped = [...discovered.skipped];
 
   for (const testCase of discovered.cases) {
     const index = await baselineIndex(testCase.repoDir);
-    let collected: Pin[];
+    let collected: CitationPin[];
     try {
-      collected = await collectPins(testCase.repoDir);
+      collected = await collectCitationPins(testCase.repoDir);
     } catch (error) {
       skipped.push({ name: testCase.name, reason: (error as Error).message });
       continue;
@@ -269,8 +318,9 @@ export async function verifyDigests(options: DiscoverOptions): Promise<DigestRep
 
   const failed = pins.filter((pin) => !sound.has(pin.status)).length;
   return {
-    schema: digestReportSchema,
-    spec: discovered.source,
+    schema: reportSchema,
+    kind: 'digests',
+    provenance: reportProvenance(discovered.source, options.claims),
     pins,
     skipped,
     summary: {

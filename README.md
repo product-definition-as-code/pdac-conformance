@@ -1,6 +1,8 @@
-# pdac-lint
+# pdac-conformance
 
 Independent conformance runner for the [Product Definition as Code specification](https://github.com/product-definition-as-code/spec).
+
+`pdac-conformance` is the canonical repository, npm package and command. The former `pdac-lint` package is a one-release transition package: its command warns and forwards to `pdac-conformance`. Update scripts and CI before that transition package is deprecated.
 
 It checks whether a PDaC implementation follows the specification. It does not validate an ordinary product repository and it does not verify a delivery document's recorded citations against the canonical model — those are `prodshape validate` and `prodshape citations verify`, two commands of [ProductShape](https://github.com/juangcarmona/productshape), the reference implementation of Product Definition as Code: what the runner measures, not what it is. No tool decides whether product claims are true; people do.
 
@@ -9,7 +11,7 @@ It runs the spec's conformance tests against any implementation's CLI. The tests
 ## Install
 
 ```bash
-npm install --global pdac-lint
+npm install --global pdac-conformance
 ```
 
 Node 24 or later. The runner has no runtime dependencies.
@@ -22,7 +24,7 @@ Point `run` at a spec checkout and tell it how to invoke the implementation unde
 
 ```bash
 git clone --depth 1 https://github.com/product-definition-as-code/spec.git
-pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate" --command "prodshape citations verify ."
+pdac-conformance run --spec ./spec --command "prodshape validate" --command "prodshape change validate" --command "prodshape citations verify ."
 ```
 
 ```text
@@ -44,7 +46,7 @@ Implementation: prodshape citations verify .
 A pass is only as honest as the run behind it, and the runner does not excuse a surface that was never exercised. Leave the citation command out and the citation case fails instead of passing by silence:
 
 ```bash
-pdac-lint run --spec ./spec --command "prodshape validate" --command "prodshape change validate"
+pdac-conformance run --spec ./spec --command "prodshape validate" --command "prodshape change validate"
 ```
 
 ```text
@@ -77,7 +79,7 @@ To pin a conformance claim to a spec version, clone the spec at that ref and poi
 The conformance tests pin content digests: a citation ledger or a Markdown marker block records the digest of the artifact it cites. Nothing else recomputes them, so editing a fixture artifact silently invalidates the citation a case describes while the case keeps asserting its expected diagnostics. `digests` recomputes every pin, under the normalization `spec/validation.md` mandates, and needs no implementation at all:
 
 ```bash
-pdac-lint digests --spec ./spec
+pdac-conformance digests --spec ./spec
 ```
 
 ```text
@@ -95,6 +97,18 @@ A pin carrying no id is never excused by an expectation, whatever that expectati
 Finding no pins at all exits `2`, not `0`. A gate that verified nothing must not read as a gate that passed, and exit `2` already means the command could not do its job.
 
 `--spec`, `--cases`, `--case` and `--format` apply as above. `--command`, `--keep` and `--timeout` do not: there is no implementation to run.
+
+### Provenance in JSON reports
+
+Both commands emit `pdac-conformance/report/v1`. Each report separates `provenance.observed` from `provenance.claimed`: the runner records its installed identity and version, plus the supplied spec checkout's Git revision and dirty state. The caller may record an implementation name, version and artifact identity, and a specification and serialization version using `--implementation-name`, `--implementation-version`, `--implementation-artifact`, `--spec-version` and `--serialization-version`.
+
+Claimed values are labels supplied by the caller. The runner does not verify or infer them, and they are not conformance evidence. This keeps the report useful for release records without imposing an implementation-specific evidence serialization.
+
+### Sound zero-diagnostic cases
+
+For a zero-diagnostic fixture with a valid citation pin, the runner mutates each cited baseline artifact and runs every configured command again. The mutation must produce an attributed `PRODUCT061` or `PRODUCT062`. For a fixture without pins, it mutates every discovered artifact's `type` to an unknown value and requires `PRODUCT003`; where the fixture has a `primary-actor` edge, it also breaks that edge and requires `PRODUCT006` for the missing target. A command that discovers no citation, artifact or graph edge cannot pass by silence. The recorded exercise results are included in the JSON report.
+
+The frozen suite's six zero-diagnostic cases are all protected: the three citation cases use pin mutations; `artifact-kinds-valid` and `configuration-custom-root` use per-artifact type mutations; and `dedicated-topology` also uses a broken graph-edge mutation. A future zero-diagnostic fixture with neither a valid pin nor a typed Product Artifact is reported as unprotected and cannot pass. These checks use ordinary specification diagnostics and do not impose an implementation-specific report envelope.
 
 ### More than one command
 
