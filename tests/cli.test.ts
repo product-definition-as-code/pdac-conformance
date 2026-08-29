@@ -207,7 +207,7 @@ describe('pdac-conformance run', () => {
     expect(json.kind).toBe('conformance');
     expect(json.provenance).toMatchObject({
       observed: {
-        runner: { name: 'pdac-conformance', version: '1.0.0' },
+        runner: { name: 'pdac-conformance', version: '1.0.1' },
         spec: { cases: casesDir, revision: null, branch: null, dirty: null },
       },
       claimed: {

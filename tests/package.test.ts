@@ -25,6 +25,6 @@ describe('package migration', () => {
     };
     expect(pkg.name).toBe('pdac-lint');
     expect(pkg.bin).toEqual({ 'pdac-lint': 'bin.js' });
-    expect(pkg.dependencies['pdac-conformance']).toBe('workspace:^1.0.0');
+    expect(pkg.dependencies['pdac-conformance']).toBe('workspace:^1.0.1');
   });
 });
