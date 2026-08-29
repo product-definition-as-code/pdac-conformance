@@ -11,4 +11,6 @@ try {
 } catch (error) {
   console.error(`internal error: ${(error as Error).stack ?? String(error)}`);
 }
-process.exit(code);
+// Let the process end on its own: process.exit() discards whatever the pipe has not flushed,
+// and a 44-case JSON report is large enough to lose its tail on a piped stdout.
+process.exitCode = code;
