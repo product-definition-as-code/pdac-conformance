@@ -32,7 +32,7 @@ importers:
   compat/pdac-lint:
     dependencies:
       pdac-conformance:
-        specifier: workspace:^1.0.0
+        specifier: workspace:^1.0.1
         version: link:../..
 
 packages:

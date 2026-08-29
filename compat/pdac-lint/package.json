@@ -1,6 +1,6 @@
 {
   "name": "pdac-lint",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Deprecated forwarding command for pdac-conformance.",
   "license": "Apache-2.0",
   "type": "module",
@@ -24,6 +24,6 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
-    "pdac-conformance": "workspace:^1.0.0"
+    "pdac-conformance": "workspace:^1.0.1"
   }
 }
