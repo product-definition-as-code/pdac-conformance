@@ -49,10 +49,8 @@ jobs:
         id: target
         run: |
           version=$(node -p "require('./package.json').version")
-          transition_version=$(node -p "require('./compat/pdac-lint/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "transition_version=$transition_version" >> "$GITHUB_OUTPUT"
-          echo "releasing pdac-conformance@$version and pdac-lint@$transition_version"
+          echo "releasing pdac-conformance@$version"
 
       # npm versions are immutable, so a republish is not a fix and not an option. Fail here,
       # before the build, rather than at the publish step with half the work done. Bump the version
@@ -67,16 +65,6 @@ jobs:
           fi
           if [ "$code" != "404" ]; then
             echo "::error::cannot determine whether pdac-conformance@$version exists (HTTP $code)"
-            exit 1
-          fi
-          transition='${{ steps.target.outputs.transition_version }}'
-          code=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/pdac-lint/$transition")
-          if [ "$code" = "200" ]; then
-            echo "::error::pdac-lint@$transition is already on npm; bump the transition version and dispatch again"
-            exit 1
-          fi
-          if [ "$code" != "404" ]; then
-            echo "::error::cannot determine whether pdac-lint@$transition exists (HTTP $code)"
             exit 1
           fi
 
@@ -100,24 +88,13 @@ jobs:
       - name: run the built binary
         run: node dist/bin.js --help
 
-      - name: run the transition command
-        run: |
-          node compat/pdac-lint/bin.js --help > transition-output.txt 2> transition-warning.txt
-          grep -Fx 'pdac-lint is deprecated; use pdac-conformance.' transition-warning.txt
-          grep -F 'pdac-conformance run' transition-output.txt
-
       # What would ship, listed, so a dry run is worth doing before the real one.
       - name: pack
-        run: |
-          npm pack --dry-run
-          mkdir transition-package
-          pnpm --filter pdac-lint pack --pack-destination transition-package
+        run: npm pack --dry-run
 
       - name: publish
         if: ${{ !inputs.dry_run }}
-        run: |
-          npm publish
-          pnpm --filter pdac-lint publish --no-git-checks
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # fallback; ignored once OIDC is configured
           NPM_CONFIG_PROVENANCE: 'true'
@@ -141,18 +118,6 @@ jobs:
             echo "::error::pdac-conformance@$version is not on the registry after a successful publish"
             exit 1
           fi
-          transition='${{ steps.target.outputs.transition_version }}'
-          for attempt in 1 2 3 4 5; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/pdac-lint/$transition")
-            if [ "$code" = "200" ]; then
-              echo "pdac-lint@$transition is on the registry"
-              exit 0
-            fi
-            echo "transition attempt $attempt: HTTP $code, waiting"
-            sleep 5
-          done
-          echo "::error::pdac-lint@$transition is not on the registry after a successful publish"
-          exit 1
 
       # An annotated tag needs a committer identity, and a fresh checkout has none. Without this the
       # tag is never created, `git push --tags` reports "Everything up-to-date", and the release
@@ -173,9 +138,8 @@ jobs:
             if [ '${{ inputs.dry_run }}' = 'true' ]; then
               echo '### Dry run: nothing was published'
             else
-              echo '### Published pdac-conformance@${{ steps.target.outputs.version }} and pdac-lint@${{ steps.target.outputs.transition_version }}'
+              echo '### Published pdac-conformance@${{ steps.target.outputs.version }}'
               echo ''
               echo 'https://www.npmjs.com/package/pdac-conformance/v/${{ steps.target.outputs.version }}'
-              echo 'https://www.npmjs.com/package/pdac-lint/v/${{ steps.target.outputs.transition_version }}'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
