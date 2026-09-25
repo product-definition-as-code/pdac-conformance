@@ -37,6 +37,7 @@ Options:
   --cases <dir>       conformance tests directory, overriding --spec
   --command <argv>    implementation command to run against each fixture, repeatable;
                       --format json is appended when absent
+  --adapter-command <argv>  trusted adapter for v2 operation cases; receives --request <file>
   --case <name>       run only this case, repeatable
   --format <fmt>      report format: text (default) or json
   --keep              keep the fixture working copies for inspection
@@ -69,6 +70,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
         spec: { type: 'string' },
         cases: { type: 'string' },
         command: { type: 'string', multiple: true },
+        'adapter-command': { type: 'string' },
         case: { type: 'string', multiple: true },
         format: { type: 'string' },
         keep: { type: 'boolean' },
@@ -158,7 +160,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
   }
 
   const commands = values.command ?? [];
-  if (commands.length === 0) {
+  if (commands.length === 0 && !values['adapter-command']) {
     io.err('error: no implementation to run: pass --command "<cli> <subcommand>" at least once');
     io.err(usage);
     return exitCodes.invalidInvocation;
@@ -180,6 +182,7 @@ export async function runCli(argv: string[], io: Io): Promise<number> {
       cases: values.cases,
       only: values.case,
       commands,
+      adapterCommand: values['adapter-command'],
       keep: values.keep,
       timeoutMs,
       claims,

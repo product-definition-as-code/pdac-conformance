@@ -2,6 +2,7 @@ import { compareDiagnostics, findOrderingViolation, toComparable } from './compa
 import { discoverCases, type TestCase, type DiscoverOptions } from './cases.js';
 import { baselineIndex, collectCitationPins, collectFixtureArtifacts } from './digests.js';
 import { parseDiagnostics } from './envelope.js';
+import { runOperationCase } from './operations.js';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { reportProvenance } from './provenance.js';
@@ -28,6 +29,7 @@ import {
 export const defaultTimeoutMs = 120_000;
 
 export interface RunOptions extends DiscoverOptions {
+  adapterCommand?: string;
   /** Implementation commands, each an unsplit command string. At least one is required. */
   commands: string[];
   keep?: boolean;
@@ -334,7 +336,7 @@ async function runCase(
   await withFixtureCopy(testCase.repoDir, testCase.name, options.keep ?? false, async (work) => {
     if (options.keep) result.workDir = work;
 
-    const seen = new Set<string>();
+    const seen = new Map<string, number>();
     const union: Diagnostic[] = [];
 
     for (const argv of commands) {
@@ -381,10 +383,13 @@ async function runCase(
       const violation = findOrderingViolation(diagnostics);
       if (violation && !result.ordering) result.ordering = violation;
 
+      const occurrences = new Map<string, number>();
       for (const diagnostic of diagnostics) {
         const key = fingerprint(diagnostic);
-        if (seen.has(key)) continue;
-        seen.add(key);
+        const count = (occurrences.get(key) ?? 0) + 1;
+        occurrences.set(key, count);
+        if (count <= (seen.get(key) ?? 0)) continue;
+        seen.set(key, count);
         union.push(diagnostic);
       }
     }
@@ -433,7 +438,27 @@ export async function runCases(options: RunOptions): Promise<Report> {
 
   const cases: CaseResult[] = [];
   for (const testCase of discovered.cases) {
-    cases.push(await runCase(testCase, commands, options));
+    cases.push(
+      testCase.operation
+        ? await runOperationCase(
+            testCase,
+            options.adapterCommand,
+            options.keep ?? false,
+            options.timeoutMs ?? defaultTimeoutMs,
+          )
+        : commands.length
+          ? await runCase(testCase, commands, options)
+          : {
+              name: testCase.name,
+              status: 'skip',
+              reason: 'flat case requires --command',
+              exitCodeMismatches: [],
+              missing: [],
+              unexpected: [],
+              runs: [],
+              exercises: [],
+            },
+    );
   }
   for (const skip of discovered.skipped) {
     cases.push({
@@ -456,7 +481,9 @@ export async function runCases(options: RunOptions): Promise<Report> {
     schema: reportSchema,
     kind: 'conformance',
     provenance: reportProvenance(discovered.source, options.claims),
-    commands: options.commands,
+    commands: options.adapterCommand
+      ? [...options.commands, options.adapterCommand]
+      : options.commands,
     cases,
     summary: {
       total: cases.length,

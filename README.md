@@ -2,6 +2,14 @@
 
 Independent conformance runner for the [Product Definition as Code specification](https://github.com/product-definition-as-code/spec).
 
+The working branch adds `pdac-conformance-case/v2` operation cases for the v0.3.0 specification candidate. This is not a new published package version yet.
+
+For those cases, supply `--adapter-command "<trusted adapter>"` alongside ordinary `--command` invocations for flat cases. The runner creates real fixture Git history, passes `--request <json-file>` to the adapter in an isolated working copy, compares diagnostics and normalized semantic reports, and checks the complete resulting tree. A missing adapter is an explicit named skip. See the coordinated specification's [operation protocol](https://github.com/product-definition-as-code/spec/blob/implement/v0.3.0/conformance/operations.md) for request fields, report normalization and the boundary between fixture integrity and observed implementation conformance. Fixtures cannot supply commands.
+
+Operation cases permit semantically equivalent YAML formatting of archived change frontmatter and the specification's optional omission of archived proposed files. An adapter may identify and decode a permitted persisted product diff; its contents are compared before the extra file is allowed. A persisted citation forecast is not permitted. Git refs and staged content must stay unchanged. YAML parsing is the one runtime dependency added for this semantic comparison.
+
+The baseline-only `digests` command explicitly skips operation cases: their evidence, acknowledgment and prospective pins are checked by the versioned spec fixture audit. Flat command unions retain repeated identical diagnostics within a command, while avoiding double-counting the same population reported by multiple commands.
+
 `pdac-conformance` is the canonical repository, npm package and command. The former `pdac-lint` package is a one-release transition package: its command warns and forwards to `pdac-conformance`. Update scripts and CI before that transition package is deprecated.
 
 It checks whether a PDaC implementation follows the specification. It does not validate an ordinary product repository and it does not verify a delivery document's recorded citations against the canonical model — those are `prodshape validate` and `prodshape citations verify`, two commands of [ProductShape](https://github.com/juangcarmona/productshape), the reference implementation of Product Definition as Code: what the runner measures, not what it is. No tool decides whether product claims are true; people do.
@@ -14,7 +22,7 @@ It runs the spec's conformance tests against any implementation's CLI. The tests
 npm install --global pdac-conformance
 ```
 
-Node 24 or later. The runner has no runtime dependencies.
+Node 24 or later. The runner uses the YAML package for semantic comparison of archived change frontmatter.
 
 ## Usage
 
@@ -132,11 +140,11 @@ Diagnostics from multiple commands are deduplicated only when all nine compared 
 
 An `expected.json` may assert `exitCode` from the specification's `0`-`3` table. The assertion applies independently to every configured implementation command, and a mismatch fails the case without suppressing diagnostic parsing, ordering or maximum matching. When no code is asserted, exit `0` or `1` is a normal validation verdict; exit `2` or `3` makes the case an **error**. Output that is not JSON or a command that hangs is always an error because the run produced no diagnostic verdict.
 
-A case this runner cannot execute is reported as **skipped**, with the reason, and never counted as evidence. That includes an `expected.json` reaching beyond `diagnostics` and `exitCode`, such as the invocation and working-tree outcome the apply cases require.
+A case this runner cannot execute is reported as **skipped**, with the reason, and never counted as evidence. Unsupported case versions and missing operation adapters are named skips; supported v2 cases execute their complete invocation, report and tree assertions.
 
 ## Scope
 
-This runner covers cases expressible as a fixture repository plus expected diagnostics and an optional exit code. It does not yet cover the apply cases, which additionally need a case format for their invocation, Git history and working-tree outcome.
+This runner supports flat diagnostics/exit-code cases and versioned operation cases with invocation, Git history, semantic reports and working-tree outcomes. The latter require an explicitly configured trusted adapter.
 
 There is no GitHub Action and no badge yet. Conformance tests first, runner second, badge last. When a badge ships it will state exactly what was checked, spec version, conformance level and profile, never a bare "PDaC conformant".
 

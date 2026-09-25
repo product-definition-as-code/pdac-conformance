@@ -4,6 +4,7 @@ import { readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type { Diagnostic, ExpectedExitCode, SkippedCase, SpecSource } from './types.js';
+import { parseOperationCase, type OperationCase } from './operations.js';
 
 export type { SkippedCase } from './types.js';
 
@@ -13,6 +14,7 @@ const run = promisify(execFile);
 export const casesRelative = join('conformance', 'cases');
 
 export interface TestCase {
+  operation?: OperationCase;
   name: string;
   dir: string;
   /** The fixture repository to run the implementation against. */
@@ -102,6 +104,21 @@ async function loadCase(dir: string, name: string): Promise<TestCase | SkippedCa
   }
 
   const keys = Object.keys(parsed);
+  if ('format' in parsed) {
+    try {
+      const operation = parseOperationCase(parsed as Record<string, unknown>);
+      return {
+        name,
+        dir,
+        repoDir,
+        expected: (parsed as Record<string, unknown>).diagnostics as Diagnostic[],
+        expectedExitCode: operation.exitCode,
+        operation,
+      };
+    } catch (error) {
+      return { name, reason: (error as Error).message };
+    }
+  }
   const unknown = keys.filter((key) => key !== 'diagnostics' && key !== 'exitCode');
   if (unknown.length > 0) {
     return {
