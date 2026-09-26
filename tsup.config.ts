@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
-// The runner has no runtime dependencies, so the bundle is the source and nothing else. A
-// certifier that pulls a supply chain of its own is a certifier nobody can audit in an afternoon.
+// YAML parsing preserves semantic comparison of archived change frontmatter:
+// conforming tools need not choose the same whitespace or key order.
 export default defineConfig({
   entry: ['src/bin.ts'],
   format: ['esm'],

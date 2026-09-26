@@ -303,6 +303,14 @@ export async function verifyDigests(
   const skipped = [...discovered.skipped];
 
   for (const testCase of discovered.cases) {
+    if (testCase.operation) {
+      skipped.push({
+        name: testCase.name,
+        reason:
+          'operation-case pins require the versioned spec fixture audit, not the baseline-only digest audit',
+      });
+      continue;
+    }
     const index = await baselineIndex(testCase.repoDir);
     let collected: CitationPin[];
     try {

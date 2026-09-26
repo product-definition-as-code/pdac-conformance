@@ -87,6 +87,42 @@ process.exit(diagnostics.length ? 1 : 0);
 
 const noDiagnostics = '{"diagnostics":[]}';
 
+it('preserves identical authored occurrences within a command while unioning commands', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pdac-occurrences-'));
+  const dir = join(root, 'cases', 'occurrences');
+  await mkdir(join(dir, 'repo'), { recursive: true });
+  const diagnostic = {
+    severity: 'error',
+    code: 'PRODUCT006',
+    file: 'lc.md',
+    artifact: 'LC-A',
+    field: 'transitions[].governed-by',
+    target: 'BR-MISSING',
+  };
+  await writeFile(
+    join(dir, 'expected.json'),
+    JSON.stringify({ diagnostics: [diagnostic, diagnostic], exitCode: 1 }),
+  );
+  const adapter = join(root, 'occurrences.mjs');
+  await writeFile(
+    adapter,
+    `console.log(${JSON.stringify(JSON.stringify({ diagnostics: [diagnostic, diagnostic] }))}); process.exitCode = 1;`,
+  );
+  const argv = `"${process.execPath}" "${adapter}"`;
+  const result = await report(
+    'run',
+    '--cases',
+    join(root, 'cases'),
+    '--command',
+    argv,
+    '--command',
+    argv,
+  );
+  expect(result.report.summary.passed).toBe(1);
+  expect(result.report.cases[0]?.missing).toEqual([]);
+  expect(result.report.cases[0]?.unexpected).toEqual([]);
+});
+
 async function writeZeroDiagnosticCase(
   cases: string,
   name: string,
