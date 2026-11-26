@@ -25,6 +25,6 @@ Before publication, check that both package names and target versions remain ava
 
 ## Accepted publication still processing
 
-npm may accept and sign a publication while the public metadata and tarball remain unavailable for several minutes. The workflow allows five minutes for this processing. Do not republish or bump a version merely because verification timed out after npm accepted it.
+npm may accept and sign a publication while the public metadata and tarball remain unavailable for several minutes. The workflow allows ten minutes for this processing and any five-minute cached 404. Do not republish or bump a version merely because verification timed out after npm accepted it.
 
 Wait for public metadata and the tarball, verify the package integrity and source revision against the successful publish step, and run the clean-install qualification. If the workflow stopped before tagging, create the missing tag at that verified publication source revision, never at a newer main. Record the original workflow and the recovery in the GitHub release. Existing tags and packages remain immutable.

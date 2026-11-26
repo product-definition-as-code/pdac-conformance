@@ -100,7 +100,7 @@ jobs:
           NPM_CONFIG_PROVENANCE: 'true'
 
       # Verify rather than trust. The registry is the only authority on whether a publish landed,
-      # and it is eventually consistent, so give it a few seconds before believing a 404.
+      # and it is eventually consistent, so give it enough time before believing a 404.
       - name: verify the publish
         if: ${{ !inputs.dry_run }}
         run: |
@@ -113,7 +113,7 @@ jobs:
               break
             fi
             echo "attempt $attempt: metadata HTTP $code, tarball HTTP $tarball_code, waiting"
-            sleep 5
+            sleep 10
           done
           if [ "$code" != "200" ] || [ "$tarball_code" != "200" ]; then
             echo "::error::pdac-conformance@$version is not on the registry after a successful publish"
