@@ -22,3 +22,9 @@ The required publication sequence is:
 Publishing runs only in [`.github/workflows/release.yml`](.github/workflows/release.yml). The protected `npm-publish` environment requires human approval. npm versions are immutable, so a defect is corrected by publishing forward rather than replacing a tarball.
 
 Before publication, check that both package names and target versions remain available. After publication, verify each package from a clean temporary installation and record its tarball digest and npm URL in the release handoff.
+
+## Accepted publication still processing
+
+npm may accept and sign a publication while the public metadata and tarball remain unavailable for several minutes. The workflow allows five minutes for this processing. Do not republish or bump a version merely because verification timed out after npm accepted it.
+
+Wait for public metadata and the tarball, verify the package integrity and source revision against the successful publish step, and run the clean-install qualification. If the workflow stopped before tagging, create the missing tag at that verified publication source revision, never at a newer main. Record the original workflow and the recovery in the GitHub release. Existing tags and packages remain immutable.

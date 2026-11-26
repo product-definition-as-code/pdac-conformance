@@ -105,16 +105,17 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: |
           version='${{ steps.target.outputs.version }}'
-          for attempt in 1 2 3 4 5; do
+          for attempt in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/pdac-conformance/$version")
-            if [ "$code" = "200" ]; then
-              echo "pdac-conformance@$version is on the registry"
+            tarball_code=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/pdac-conformance/-/pdac-conformance-$version.tgz")
+            if [ "$code" = "200" ] && [ "$tarball_code" = "200" ]; then
+              echo "pdac-conformance@$version metadata and tarball are on the registry"
               break
             fi
-            echo "attempt $attempt: HTTP $code, waiting"
+            echo "attempt $attempt: metadata HTTP $code, tarball HTTP $tarball_code, waiting"
             sleep 5
           done
-          if [ "$code" != "200" ]; then
+          if [ "$code" != "200" ] || [ "$tarball_code" != "200" ]; then
             echo "::error::pdac-conformance@$version is not on the registry after a successful publish"
             exit 1
           fi
